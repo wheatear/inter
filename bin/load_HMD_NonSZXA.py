@@ -349,7 +349,7 @@ class Builder(object):
         self.inFileName = main.inFileName
         self.backFileName = '%s.bak' % self.inFileName
         self.errFileName = '%s.err' % self.inFileName
-        self.errFile = os.path.join(self.main.dirOutput, self.errFileName)
+        self.errFile = os.path.join(self.main.dirInput, self.errFileName)
         self.fErr = None
         self.orderDs = None
         self.client = ZgClient()
@@ -381,7 +381,8 @@ class Builder(object):
 
     def backFile(self):
         '''backup hmd file to back dir'''
-        shutil.copy(self.orderDsName, os.path.join(self.main.dirBack, self.inFileName))
+        if os.path.exists(self.orderDsName):
+            shutil.copy(self.orderDsName, self.main.dirBack)
         # os.rename(fileWkRsp, fileOutRsp)
 
     def saveErrOrder(self, line):
@@ -393,6 +394,7 @@ class Builder(object):
     def start(self):
         self.backFile()
         self.openDs()
+        self.openErr()
         logging.debug('load hmd %s.', self.orderDsName)
         for line in self.orderDs:
             line = line.strip()
@@ -419,14 +421,17 @@ class Builder(object):
     def clearFile(self):
         '''clear all files which been done'''
         logging.info('clear files')
-        os.remove(self.orderDsName)
-        os.rename(self.errFile, os.path.join(self.main.dirBack, self.errFileName))
+        if os.path.exists(self.orderDsName):
+            os.remove(self.orderDsName)
+        if os.path.isfile(self.errFile):
+            os.rename(self.errFile, os.path.join(self.main.dirBack, self.errFileName))
 
     def clearAll(self):
         '''clear context env for cur file connection backfile'''
         for cur in self.client.dCur:
-            self.client.dCur.pop(cur).close()
-        main.conn.close()
+            self.client.dCur[cur].close()
+        self.client.dCur.clear()
+        main.conn.conn.close()
         main.conn = None
         self.closeDs()
         self.clearFile()
@@ -535,12 +540,12 @@ class Main(object):
         cfgName = '%s.cfg' % self.appNameBody
         logName = '%s_%s.log' % (self.appNameBody, self.today)
         logNamePre = '%s_%s' % (self.appNameBody, self.today)
-        outFileName = '%s_%s' % (os.path.basename(self.inFileName), self.today)
+        # outFileName = '%s_%s' % (os.path.basename(self.inFileName), self.today)
         self.cfgFile = os.path.join(self.dirCfg, cfgName)
         self.logFile = os.path.join(self.dirLog, logName)
         self.logPre = os.path.join(self.dirLog, logNamePre)
-        self.outFile = os.path.join(self.dirOutput, outFileName)
-        self.cmdFile = os.path.join(self.dirTpl, self.cmdFileName)
+        # self.outFile = os.path.join(self.dirOutput, outFileName)
+        # self.cmdFile = os.path.join(self.dirTpl, self.cmdFileName)
         # if self.inFileName:
         #     self.dsIn = os.path.join(self.dirInput, self.inFileName)
 
