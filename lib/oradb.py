@@ -110,7 +110,7 @@ class _LasyConnection(object):
         if self.connection:
             connection = self.connection
             self.connection = None
-            logging.info('close connection <%s>...' % hex(id(connection)))
+            logging.info('close connection <%s>.' % hex(id(connection)))
             connection.close()
 
 
@@ -254,9 +254,9 @@ class _CursorCtx(object):
         logging.info('SQL: %s, ARGS: %s' % (self.sql, d_arg))
         try:
             if d_arg:
-                self.cur.execute(sql, d_arg)
+                self.cur.execute(None, d_arg)
             else:
-                self.cur.execute(sql)
+                self.cur.execute(None)
             if self.cur.description:
                 names = [x[0] for x in self.cur.description]
             if first:
@@ -283,7 +283,6 @@ class _CursorCtx(object):
         Execute select SQL and expected one int and only one int result.
         '''
         d = self._select(True, d_arg)
-        print(d)
         if len(d) != 1:
             raise MultiColumnsError('Expect only one column.')
         return d.values()[0]
@@ -299,9 +298,9 @@ class _CursorCtx(object):
         logging.info('SQL: %s, ARGS: %s' % (self.sql, d_arg))
         try:
             if d_arg:
-                self.cur.execute(sql, d_arg)
+                self.cur.execute(None, d_arg)
             else:
-                self.cur.execute(sql)
+                self.cur.execute(None)
             r = self.cur.rowcount
             if self.db_ctx.transactions == 0:
                 # no transaction enviroment:
@@ -337,18 +336,21 @@ class _CursorGrpCtx(object):
         with connection():
             pass
     '''
-    def __init__(self, db_ctx=None):
+    def __init__(self, d_sql=None, db_ctx=None):
         global _db_ctx
         self.db_ctx = db_ctx
-        self.dSql = None
+        self.dSql = d_sql
         self.dCur = None
         if not db_ctx:
             self.db_ctx = _db_ctx
+        if d_sql:
+            for k, v in d_sql.items():
+                self.get_cur(k, v)
         # if not self.db_ctx.is_init():
         #     raise DBError('db_ctx is not initialized.')
 
     def __enter__(self):
-        # global _db_ctx
+        logging.info('enter cursorGrp_ctx <%s>...', hex(id(self)))
         self.db_ctx_cleanup = False
         self.cur_cleanup = False
         if not self.db_ctx.is_init():
@@ -364,33 +366,117 @@ class _CursorGrpCtx(object):
 
     def get_cur(self, cur_name, cur_sql):
         if cur_name not in self.dCur:
+            logging.info('open cursor %s...', cur_name)
             self.dSql[cur_name] = cur_sql
             self.dCur[cur_name] = self.db_ctx.connection.cursor()
             self.dCur[cur_name].prepare(cur_sql)
+            logging.info('opened cursor %s: <%s>', cur_name, hex(id(self.dCur[cur_name])))
         return self.dCur[cur_name]
 
     def __exit__(self, exctype, excvalue, traceback):
-        # global _db_ctx
+        logging.info('exit cursorGrp_ctx <%s>.', hex(id(self)))
         if self.cur_cleanup:
-            for cn in self.dCur:
-                logging.info('close cursor %s' % cn)
-                cur = self.dCur.pop(cn)
+            for sn, cur in self.dCur.items():
+                logging.info('close cursor %s: <%s>', sn, hex(id(cur)))
                 cur.close()
-                self.dSql.pop(cn)
+                self.dSql.pop(sn)
+            self.dCur.clear()
             self.dCur = None
             self.dSql = None
         if self.db_ctx_cleanup:
             self.db_ctx.cleanup()
 
+    def _select(self, sql_name, sql, first, d_arg):
+        logging.info('SQL: %s, ARGS: %s' % (sql_name, d_arg))
+        try:
+            if sql_name not in self.dCur:
+                self.get_cur(sql_name, sql)
+            cur = self.dCur[sql_name]
+            if d_arg:
+                cur.execute(None, d_arg)
+            else:
+                cur.execute(None)
+            if cur.description:
+                names = [x[0] for x in cur.description]
+            if first:
+                values = cur.fetchone()
+                if not values:
+                    return None
+                return Dict(names, values)
+            return [Dict(names, x) for x in cur.fetchall()]
+        finally:
+            # if self.cur:
+            #     self.cur.close()
+            logging.debug('select %s ok.', sql_name)
 
-def connection():
+    def select_one(self, sql_name, sql=None, d_arg=None):
+        '''
+        Execute select SQL and expected one result.
+        If no result found, return None.
+        If multiple results found, the first one returned.
+        '''
+        return self._select(sql_name, sql, True, d_arg)
+
+    def select_int(self, sql_name, sql=None, d_arg=None):
+        '''
+        Execute select SQL and expected one int and only one int result.
+        '''
+        d = self._select(sql_name, sql, True, d_arg)
+        if len(d) != 1:
+            raise MultiColumnsError('Expect only one column.')
+        return d.values()[0]
+
+    def select(self, sql_name, sql=None,  d_arg=None):
+        '''
+        Execute select SQL and return list or empty list if no result.
+        '''
+        return self._select(sql_name, sql, False, d_arg)
+
+    def _update(self, sql_name, sql, d_arg):
+        # sql = sql.replace('?', '%s')
+        logging.info('SQL: %s, ARGS: %s' % (sql_name, d_arg))
+        try:
+            if sql_name not in self.dCur:
+                self.get_cur(sql_name, sql)
+            cur = self.dCur[sql_name]
+            if d_arg:
+                cur.execute(None, d_arg)
+            else:
+                cur.execute(None)
+            r = cur.rowcount
+            if self.db_ctx.transactions == 0:
+                # no transaction enviroment:
+                logging.info('auto commit')
+                self.db_ctx.connection.commit()
+            return r
+        finally:
+            logging.debug('execute %s ok.', sql_name)
+
+    def insert(self, sql_name, sql=None, d_arg=None):
+        '''
+        Execute insert SQL.
+        Traceback (most recent call last):
+          ...
+        IntegrityError: 1062 (23000): Duplicate entry '2000' for key 'PRIMARY'
+        '''
+        return self._update(sql_name, sql, d_arg)
+
+    def update(self, sql_name, sql=None, d_arg=None):
+        r'''
+        Execute update or delete SQL.
+        '''
+        return self._update(sql_name, sql, d_arg)
+
+
+
+def connection(db_ctx=None):
     '''
     Return _ConnectionCtx object that can be used by 'with' statement:
 
     with connection():
         pass
     '''
-    return _ConnectionCtx()
+    return _ConnectionCtx(db_ctx)
 
 
 def with_connection(func, db_ctx=None):
@@ -470,7 +556,7 @@ class _TransactionCtx(object):
         logging.info('rollback ok.')
 
 
-def transaction():
+def transaction(db_ctx=None):
     '''
     Create a transaction object so can use with statement:
 
@@ -495,7 +581,7 @@ def transaction():
     >>> select('select * from user where id=?', 900302)
     []
     '''
-    return _TransactionCtx()
+    return _TransactionCtx(db_ctx)
 
 
 def with_transaction(func):
@@ -925,8 +1011,8 @@ class Db(object):
     def open_cursor(self, sql):
         return _CursorCtx(sql, self.db_ctx)
 
-    def open_curgrp(self, d_sql):
-        return _CursorCtx(d_sql, self.db_ctx)
+    def open_curgrp(self, d_sql=None):
+        return _CursorGrpCtx(d_sql, self.db_ctx)
 
 
 if __name__=='__main__':
@@ -940,19 +1026,28 @@ if __name__=='__main__':
     dbConf = {'user':'zg', 'password':'ngboss4,123', 'host':'10.7.5.132', 'port':1521, 'sid':'ng1tst01'}
     ktdb = Db(dbConf)
     sql = 'select sysdate from dual'
-    sysdate = ktdb.select_one('select sysdate from dual')
-    print(sysdate)
+    with connection(ktdb.db_ctx):
+        sysdate = ktdb.select_one('select sysdate from dual')
+        print(sysdate)
 
-    time.sleep(1)
-    with _CursorCtx(sql, ktdb.db_ctx) as curCtx:
-        sysdate1 = curCtx.select_one(None)
-        print('date1: %s' % sysdate1)
-        sysdate2 = curCtx.select_one(None)
-        print('date2: %s' % sysdate2)
+        time.sleep(1)
+        with _CursorCtx(sql, ktdb.db_ctx) as curCtx:
+            sysdate1 = curCtx.select_one(None)
+            print('date1: %s' % sysdate1)
+            sysdate2 = curCtx.select_one(None)
+            print('date2: %s' % sysdate2)
 
-    time.sleep(2)
-    with ktdb.open_cursor(sql) as curCtx:
-        sysdate3 = curCtx.select_one(None)
-        print('date3: %s' % sysdate3)
-        sysdate4 = curCtx.select_one(None)
-        print('date4: %s' % sysdate4)
+        time.sleep(2)
+        with ktdb.open_cursor(sql) as curCtx:
+            sysdate3 = curCtx.select_one(None)
+            print('date3: %s' % sysdate3)
+            sysdate4 = curCtx.select_one(None)
+            print('date4: %s' % sysdate4)
+
+        time.sleep(1)
+        with ktdb.open_curgrp() as curGrp:
+            curGrp.get_cur('sysdate', sql)
+            sysdate5 = curGrp.select_one('sysdate')
+            print('date5: %s' % sysdate5)
+            sysdate6 = curGrp.select_one('sysdate')
+            print('date6: %s' % sysdate6)
