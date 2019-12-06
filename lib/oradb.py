@@ -796,8 +796,8 @@ class Db(object):
     def __init__(self, dbconf):
         import cx_Oracle as orcl
         host, port, sid, service_name = dbconf.pop('host'), dbconf.pop('port'), dbconf.get('sid',None), dbconf.get('service_name',None)
-        if 'service_name' in dbConf: dbConf.pop('service_name')
-        if 'sid' in dbConf: dbConf.pop('sid')
+        if 'service_name' in dbconf: dbconf.pop('service_name')
+        if 'sid' in dbconf: dbconf.pop('sid')
         dsn = None
         if sid:
             dsn = orcl.makedsn(host, port, sid=sid)

@@ -114,14 +114,16 @@ def _gen_sql(table_name, mappings):
     sql = ['-- generating SQL for %s:' % table_name, 'create table %s (' % table_name]
     for f in sorted(mappings.values(), lambda x, y: cmp(x._order, y._order)):
         if not hasattr(f, 'ddl'):
-            raise StandardError('no ddl in field "%s".' % n)
+            raise StandardError('no ddl in field "%s".' % f.name)
         ddl = f.ddl
         nullable = f.nullable
         if f.primary_key:
             pk = f.name
         sql.append(nullable and '  %s %s,' % (f.name, ddl) or '  %s %s not null,' % (f.name, ddl))
-    sql.append('  primary key(%s)' % pk)
+    # sql.append('  primary key(%s)' % pk)
+    sql = sql[:-1]
     sql.append(');')
+    sql.append('alert table %s add constraint PK_%s primary key (%s);' % (table_name, table_name, pk))
     return '\n'.join(sql)
 
 class ModelMetaclass(type):
@@ -229,7 +231,7 @@ class Model(dict):
     __metaclass__ = ModelMetaclass
     db = None
 
-    def __init__(self, db, **kw):
+    def __init__(self, **kw):
         super(Model, self).__init__(**kw)
 
     def __getattr__(self, key):
@@ -328,10 +330,54 @@ class Model(dict):
         self.db.insert('%s' % self.__table__, params)
         return self
 
+
+class Tmp_ps(Model):
+    ps_id = IntegerField(ddl='NUMBER(15)', primary_key=True)
+    bill_id = StringField(ddl='VARCHAR2(64)')
+    ps_param = StringField(ddl='VARCHAR2(4000)')
+
 if __name__=='__main__':
     logging.basicConfig(level=logging.DEBUG)
-    db.create_engine('www-data', 'www-data', 'test')
-    db.update('drop table if exists user')
-    db.update('create table user (id int primary key, name text, email text, passwd text, last_modified real)')
-    import doctest
-    doctest.testmod()
+    # oradb.create_engine('www-data', 'www-data', 'test')
+    # oradb.update('drop table if exists user')
+    # oradb.update('create table user (id int primary key, name text, email text, passwd text, last_modified real)')
+    # import doctest
+    # doctest.testmod()
+
+    dbConf = {'user': 'kt4', 'password': 'kt4', 'host': '10.7.5.164', 'port': 1521, 'sid': 'ngtst02', 'service_name': ''}
+    ktdb = oradb.Db(dbConf)
+    Tmp_ps.db = ktdb
+
+    sql = 'select sysdate from dual'
+
+    with oradb.connection(ktdb.db_ctx):
+        sysdate = ktdb.select_one('select sysdate from dual')
+        print(sysdate)
+
+        tmp_ps = Tmp_ps.get(103258)
+        print('type: %s' % type(tmp_ps))
+        print(tmp_ps)
+        print('ps_id: %d, bill_id: %s, ps_param: %s' % (tmp_ps.ps_id, tmp_ps.bill_id, tmp_ps.ps_param))
+
+        # time.sleep(1)
+        # with _CursorCtx(sql, ktdb.db_ctx) as curCtx:
+        #     sysdate1 = curCtx.select_one(None)
+        #     print('date1: %s' % sysdate1)
+        #     sysdate2 = curCtx.select_one(None)
+        #     print('date2: %s' % sysdate2)
+        #
+        # time.sleep(2)
+        # with ktdb.open_cursor(sql) as curCtx:
+        #     sysdate3 = curCtx.select_one(None)
+        #     print('date3: %s' % sysdate3)
+        #     sysdate4 = curCtx.select_one(None)
+        #     print('date4: %s' % sysdate4)
+        #
+        # time.sleep(1)
+        # with ktdb.open_curgrp() as curGrp:
+        #     curGrp.get_cur('sysdate', sql)
+        #     sysdate5 = curGrp.select_one('sysdate')
+        #     print('date5: %s' % sysdate5)
+        #     sysdate6 = curGrp.select_one('sysdate')
+        #     print('date6: %s' % sysdate6)
+
