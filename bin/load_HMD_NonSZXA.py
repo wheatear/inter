@@ -203,11 +203,15 @@ class DbConn(object):
     def prepareSql(self, sql):
         logging.info('prepare sql: %s', sql)
         cur = self.conn.cursor()
+        # cur.prepare(sql)
         try:
             cur.prepare(sql)
         except orcl.DatabaseError, e:
             logging.error('prepare sql err: %s', sql)
+            logging.error(e)
             return None
+        # finally:
+        #     pass
         return cur
 
     def executemanyCur(self, cur, params):
@@ -248,6 +252,7 @@ class DbConn(object):
 
     def executeCur(self, cur, params=None):
         logging.info('execute cur %s', cur.statement)
+        logging.info(params)
         try:
             if params is None:
                 cur.execute(None)
@@ -264,9 +269,9 @@ class ZgClient(object):
     dSql['ProdId'] = 'select prod_id from inter.bi_imei_prod_info'
     dSql['SONBR'] = "select zg.sid.nextval from dual"
     dSql['CrmUser'] = 'select serv_id,cust_id,acct_id,zg.sid.nextval as SO_NBR,substr(serv_id,-1)+101 as servregion,substr(acct_id,-1)+101 as acctregion from zg.crm_user where phone_id=:PHONE_ID'
-    dSql['UserSprom'] = "SELECT 1 FROM ZG.i_user_sprom_0%s WHERE SERV_ID=:SERV_ID AND sprom_id in(select prod_id from inter.bi_imei_prod_info) and valid_date<to_date(to_char(add_months(trunc(sysdate),-1),'yyyymm')||'01','yyyymmdd') and expire_date>sysdate"
-    dSql['InstUserParam'] = "insert into jd.i_user_param(user_id,region_code,param_id,param_value,remark,valid_date,expire_date,so_nbr,oper_type,commit_date) values(:SERV_ID,:REGION_CODE,530006,'1','机卡分离黑名单',TO_DATE(TO_CHAR(sysdate,'yyyymm')||'01','yyyymmdd'),TO_DATE(TO_CHAR(add_months(trunc(sysdate),1),'yyyymm')||'01','yyyymmdd'),:SO_NBR,1,sysdate)"
-    dSql['InstDataIndex'] = "insert into jd.i_data_index(cust_id,acct_id,user_id,up_field,region_code,county_code,commit_date,so_nbr,remark,done_code,busi_code) values(:CUST_ID,:ACCT_ID,:SERV_ID,'0000000000000000000000000000001000000000000000000000000000000000',:REGION_CODE,1000,sysdate,:SO_NBR,'机卡分离黑名单',:SO_NBR,0)"
+    dSql['UserSprom'] = "SELECT 1 FROM ZG.i_user_sprom_0%s WHERE SERV_ID=:SERV_ID AND sprom_id in(select prod_id from inter.bi_imei_prod_info) and valid_date<=to_date(to_char(add_months(trunc(sysdate),-2),'yyyymm')||'01','yyyymmdd') and expire_date>sysdate"
+    dSql['InstUserParam'] = "insert into jd.i_user_param_%s(user_id,region_code,param_id,param_value,remark,valid_date,expire_date,so_nbr,oper_type,commit_date) values(:SERV_ID,:REGION_CODE,530006,'1','hmd',TO_DATE(TO_CHAR(sysdate,'yyyymm')||'01','yyyymmdd'),TO_DATE(TO_CHAR(add_months(trunc(sysdate),1),'yyyymm')||'01','yyyymmdd'),:SO_NBR,1,sysdate)"
+    dSql['InstDataIndex'] = "insert into jd.i_data_index(cust_id,acct_id,user_id,up_field,region_code,county_code,commit_date,so_nbr,remark,done_code,busi_code) values(:CUST_ID,:ACCT_ID,:SERV_ID,'0000000000000000000000000000001000000000000000000000000000000000',:REGION_CODE,1000,sysdate,:SO_NBR,'hmd',:SO_NBR,0)"
 
     def __init__(self):
         # self.dNetInfo = netInfo
@@ -277,13 +282,18 @@ class ZgClient(object):
     def getCurbyName(self, curName):
         '''get cursor by name'''
         if curName in self.dCur: return self.dCur[curName]
-        if (curName[:9] != 'UserSprom') and (curName not in self.dSql):
+        curPre = curName[:9]
+        if (curPre != 'UserSprom') and (curPre != 'InstUserP') and (curName not in self.dSql):
             logging.error('no cursor %s', curName)
             return None
         sql = ''
-        if curName[:9] == 'UserSprom':
+        if curPre == 'UserSprom':
             namePre = curName[:9]
             regionCode = curName[9:]
+            sql = self.dSql[namePre] %  regionCode
+        elif curPre == 'InstUserP':
+            namePre = curName[:13]
+            regionCode = curName[13:]
             sql = self.dSql[namePre] %  regionCode
         else:
             sql = self.dSql[curName]
@@ -324,8 +334,8 @@ class ZgClient(object):
 
     def save(self, order):
         '''save hmd order to jd.i_user_param and jd.i_data_index'''
-        curName = 'UserSprom%s' % order['SERV_REGION']
-        curUserPara = self.getCurbyName('InstUserParam')
+        curUserName = 'InstUserParam%s' % main.curMon
+        curUserPara = self.getCurbyName(curUserName)
         curDataIndex = self.getCurbyName('InstDataIndex')
         dVarUP = {'SERV_ID': order['SERV_ID'],
                   'REGION_CODE': order['SERV_REGION'],
@@ -338,7 +348,7 @@ class ZgClient(object):
                   }
         self.conn.executeCur(curUserPara, dVarUP)
         self.conn.executeCur(curDataIndex, dVarDI)
-        self.conn.commit()
+        self.conn.conn.commit()
 
 
 class Builder(object):
@@ -415,6 +425,7 @@ class Builder(object):
                     self.client.save(order)
             except Exception, e:
                 logging.error('process failure: %s ', line)
+                logging.error(e)
                 self.saveErrOrder(line)
         self.clearAll()
 
@@ -429,7 +440,9 @@ class Builder(object):
     def clearAll(self):
         '''clear context env for cur file connection backfile'''
         for cur in self.client.dCur:
-            self.client.dCur[cur].close()
+            dbCur = self.client.dCur[cur]
+            if dbCur:
+                self.client.dCur[cur].close()
         self.client.dCur.clear()
         main.conn.conn.close()
         main.conn = None
@@ -531,6 +544,7 @@ class Main(object):
 
         # self.today = time.strftime("%Y%m%d%H%M%S", time.localtime())
         self.today = time.strftime("%Y%m%d", time.localtime())
+        self.curMon = self.today[:6]
         # 上月
         today = datetime.date.today()
         last_month = today + datetime.timedelta(days=-today.day)
