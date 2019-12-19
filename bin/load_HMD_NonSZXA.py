@@ -374,10 +374,13 @@ class Builder(object):
             exit(2)
         return self.orderDs
 
-    def closeDs(self):
+    def closeFile(self):
         if self.orderDs:
             self.orderDs.close()
             self.orderDs = None
+        if self.fErr:
+            self.fErr.close()
+            self.fErr = None
 
     def openErr(self):
         '''open error file for error orderes writed into'''
@@ -402,7 +405,7 @@ class Builder(object):
             logging.error('write errfile failure')
 
     def start(self):
-        self.backFile()
+        # self.backFile()
         self.openDs()
         self.openErr()
         logging.debug('load hmd %s.', self.orderDsName)
@@ -446,8 +449,8 @@ class Builder(object):
         self.client.dCur.clear()
         main.conn.conn.close()
         main.conn = None
-        self.closeDs()
-        self.clearFile()
+        self.closeFile()
+        # self.clearFile()
 
 
 class Director(object):
@@ -501,7 +504,8 @@ class Main(object):
         self.dsIn = None
 
     def checkArgv(self):
-        self.dirBase = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.dirBin = os.path.dirname(os.path.abspath(__file__))
+        self.dirBase = os.path.dirname(self.dirBin)
         self.appName = os.path.basename(self.Name)
         self.appNameBody, self.appNameExt = os.path.splitext(self.appName)
 
@@ -532,15 +536,16 @@ class Main(object):
         #     self.dsIn = arvs[0]
 
     def parseWorkEnv(self):
-        self.dirBin = os.path.join(self.dirBase, 'bin')
-        self.dirLog = os.path.join(self.dirBase, 'log')
-        self.dirCfg = os.path.join(self.dirBase, 'bin')
-        self.dirTpl = os.path.join(self.dirBase, 'template')
-        self.dirLib = os.path.join(self.dirBase, 'lib')
-        self.dirInput = os.path.join(self.dirBase, 'input')
-        self.dirBack = os.path.join(self.dirBase, 'back')
-        self.dirOutput = os.path.join(self.dirBase, 'output')
-        self.dirWork = os.path.join(self.dirBase, 'work')
+        # self.dirBin = os.path.join(self.dirBase, 'bin')
+        # self.dirLog = os.path.join(self.dirBase, 'log')
+        # self.dirCfg = os.path.join(self.dirBase, 'bin')
+        self.dirCfg = self.dirBin
+        # self.dirTpl = os.path.join(self.dirBase, 'template')
+        # self.dirLib = os.path.join(self.dirBase, 'lib')
+        # self.dirInput = os.path.join(self.dirBase, 'input')
+        # self.dirBack = os.path.join(self.dirBase, 'back')
+        # self.dirOutput = os.path.join(self.dirBase, 'output')
+        # self.dirWork = os.path.join(self.dirBase, 'work')
 
         # self.today = time.strftime("%Y%m%d%H%M%S", time.localtime())
         self.today = time.strftime("%Y%m%d", time.localtime())
@@ -556,8 +561,8 @@ class Main(object):
         logNamePre = '%s_%s' % (self.appNameBody, self.today)
         # outFileName = '%s_%s' % (os.path.basename(self.inFileName), self.today)
         self.cfgFile = os.path.join(self.dirCfg, cfgName)
-        self.logFile = os.path.join(self.dirLog, logName)
-        self.logPre = os.path.join(self.dirLog, logNamePre)
+        # self.logFile = os.path.join(self.dirLog, logName)
+        # self.logPre = os.path.join(self.dirLog, logNamePre)
         # self.outFile = os.path.join(self.dirOutput, outFileName)
         # self.cmdFile = os.path.join(self.dirTpl, self.cmdFileName)
         # if self.inFileName:
