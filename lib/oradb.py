@@ -87,11 +87,11 @@ class MultiColumnsError(DBError):
 
 class _LasyConnection(object):
 
-    def __init__(self, eng=None):
+    def __init__(self, eng=engine):
         self.connection = None
         self.engine = eng
-        if not eng:
-            self.engine = engine
+        # if not eng:
+        #     self.engine = engine
 
     def cursor(self):
         if self.connection is None:
@@ -118,12 +118,12 @@ class _DbCtx(threading.local):
     '''
     Thread local object that holds connection info.
     '''
-    def __init__(self, eng=None):
+    def __init__(self, eng=engine):
         self.connection = None
         self.transactions = 0
         self.engine = eng
-        if not eng:
-            self.engine = eng
+        # if not eng:
+        #     self.engine = engine
 
     def is_init(self):
         return not self.connection is None
@@ -162,9 +162,9 @@ class _Engine(object):
 
 def create_engine(dbconf, user, password, database, host='127.0.0.1', port=1521, **kw):
     import cx_Oracle as orcl
-    global engine
-    if engine is not None:
-        raise DBError('Engine is already initialized.')
+    # global engine
+    # if engine is not None:
+    #     raise DBError('Engine is already initialized.')
     host, port, sid, service_name = dbconf.pop('host'), dbconf.pop('port'), dbconf.get('sid', None), dbconf.get(
         'service_name', None)
     if 'service_name' in dbConf: dbConf.pop('service_name')
@@ -177,6 +177,7 @@ def create_engine(dbconf, user, password, database, host='127.0.0.1', port=1521,
     dbconf['dsn'] = dsn
     engine = _Engine(lambda: orcl.connect(**dbconf))
     logging.info('Init oracle engine <%s> ok.' % hex(id(engine)))
+    return engine
 
 
 class _ConnectionCtx(object):
@@ -359,7 +360,7 @@ class _CursorGrpCtx(object):
         if not self.dCur:
             # self.cur = self.db_ctx.connection.cursor()
             # self.cur.prepare(self.sql)
-            self.dSql = {}
+            # self.dSql = {}
             self.dCur = {}
             self.cur_cleanup = True
         return self
@@ -808,6 +809,19 @@ class Db(object):
         logging.info('Init oracle engine <%s> ok.' % hex(id(eng)))
         self.db_ctx = _DbCtx(eng)
 
+    def __enter__(self):
+        # global _db_ctx
+        self.should_cleanup = False
+        if not self.db_ctx.is_init():
+            self.db_ctx.init()
+            self.should_cleanup = True
+        return self
+
+    def __exit__(self, exctype, excvalue, traceback):
+        # global _db_ctx
+        if self.should_cleanup:
+            self.db_ctx.cleanup()
+
     def connection(self):
         '''
         Return _ConnectionCtx object that can be used by 'with' statement:
@@ -1017,7 +1031,7 @@ class Db(object):
 
 if __name__=='__main__':
     logging.basicConfig(level=logging.DEBUG)
-    # create_engine('www-data', 'www-data', 'test')
+    # engine = create_engine('www-data', 'www-data', 'test')
     # update('drop table if exists user')
     # update('create table user (id int primary key, name text, email text, passwd text, last_modified real)')
     # import doctest
