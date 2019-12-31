@@ -94,11 +94,12 @@ class MultiColumnsError(DBError):
 
 class _LasyConnection(object):
 
-    def __init__(self, eng=engine):
+    def __init__(self, eng=None):
+        # global engine
         self.connection = None
-        self.engine = eng
-        # if not eng:
-        #     self.engine = engine
+        self.engine = engine
+        if eng:
+            self.engine = eng
 
     def cursor(self):
         if self.connection is None:
@@ -121,24 +122,27 @@ class _LasyConnection(object):
             connection.close()
 
 
+engine = None
+
+
 class _DbCtx(threading.local):
     '''
     Thread local object that holds connection info.
     '''
-    def __init__(self, eng=engine):
+    def __init__(self, eng=None):
         self.connection = None
         self.dCur = {}
         self.dSql = {}
         self.transactions = 0
-        self.engine = eng
-        # if not eng:
-        #     self.engine = engine
+        self.engine = engine
+        if eng:
+            self.engine = eng
 
     def is_init(self):
         return not self.connection is None
 
     def init(self):
-        logging.info('open lazy connection...')
+        logging.info('open lazy connection from engine <%s>...', hex(id(self.engine)))
         self.connection = _LasyConnection(self.engine)
         self.transactions = 0
 
@@ -258,11 +262,11 @@ class _CursorCtx(object):
 
     def __exit__(self, exctype, excvalue, traceback):
         logging.info('exit cursor_ctx <%s>.', hex(id(self)))
-        if self.cur_cleanup:
-            self.cur.close()
-            self.cur = None
-            self.db_ctx.dCur.pop(self.sql_name)
-            self.db_ctx.dSql.pop(self.sql_name)
+        # if self.cur_cleanup:
+        #     self.cur.close()
+        #     self.cur = None
+        #     self.db_ctx.dCur.pop(self.sql_name)
+        #     self.db_ctx.dSql.pop(self.sql_name)
         if self.db_ctx_cleanup:
             self.db_ctx.cleanup()
 
@@ -831,6 +835,7 @@ class Db(object):
 
     def __enter__(self):
         # global _db_ctx
+        # print('enter db ...')
         self.should_cleanup = False
         self.cur_cleanup = False
         if not self.db_ctx.is_init():
@@ -888,14 +893,23 @@ class Db(object):
         return _TransactionCtx(self.db_ctx)
 
     def cursor(self, sql):
-        return _CursorCtxCtx(sql, self.db_ctx)
+        return _CursorCtx(sql, self.db_ctx)
+
+    def close_cursor(self, sql):
+        sql_name = get_sql_key(sql)
+        if sql_name in self.db_ctx.dCur:
+            cur = self.db_ctx.dCur.pop(sql_name)
+            self.db_ctx.dSql.pop(sql_name)
+            cur.close()
 
     def _select(self, sql, first, d_arg):
         ' execute select SQL and return unique result or list results.'
-        cursor = self.cursor(sql)
+        # cursor = self.cursor(sql)
         # with cursor:
-        return cursor._select(first, d_arg)
-        logging.info('SQL: %s, ARGS: %s' % (sql, d_arg))
+        logging.info('SQL: %s, ARGS: %s', sql, d_arg)
+        with self.cursor(sql) as cursor:
+            return cursor._select(first, d_arg)
+
         # try:
         #     cursor = self.db_ctx.connection.cursor()
         #     if d_arg:
@@ -1076,19 +1090,19 @@ if __name__=='__main__':
         sysdate = ktdb.select_one('select sysdate from dual')
         print(sysdate)
 
-        time.sleep(1)
-        with _CursorCtx(sql, ktdb.db_ctx) as curCtx:
-            sysdate1 = curCtx.select_one(None)
-            print('date1: %s' % sysdate1)
-            sysdate2 = curCtx.select_one(None)
-            print('date2: %s' % sysdate2)
-
-        time.sleep(2)
-        with ktdb.open_cursor(sql) as curCtx:
-            sysdate3 = curCtx.select_one(None)
-            print('date3: %s' % sysdate3)
-            sysdate4 = curCtx.select_one(None)
-            print('date4: %s' % sysdate4)
+        # time.sleep(1)
+        # with _CursorCtx(sql, ktdb.db_ctx) as curCtx:
+        #     sysdate1 = curCtx.select_one(None)
+        #     print('date1: %s' % sysdate1)
+        #     sysdate2 = curCtx.select_one(None)
+        #     print('date2: %s' % sysdate2)
+        #
+        # time.sleep(2)
+        # with ktdb.open_cursor(sql) as curCtx:
+        #     sysdate3 = curCtx.select_one(None)
+        #     print('date3: %s' % sysdate3)
+        #     sysdate4 = curCtx.select_one(None)
+        #     print('date4: %s' % sysdate4)
 
         # time.sleep(1)
         # with ktdb.open_curgrp() as curGrp:
@@ -1097,3 +1111,11 @@ if __name__=='__main__':
         #     print('date5: %s' % sysdate5)
         #     sysdate6 = curGrp.select_one('sysdate')
         #     print('date6: %s' % sysdate6)
+
+        time.sleep(1)
+        with ktdb.cursor(sql) as curCtx:
+            sysdate1 = curCtx.select_one(None)
+            print('date1: %s' % sysdate1)
+            sysdate2 = curCtx.select_one(None)
+            print('date2: %s' % sysdate2)
+
