@@ -848,6 +848,9 @@ class Db(object):
         if self.cur_cleanup:
             self.dCur.clear()
 
+    def cur_clear(self):
+        pass
+
     def connection(self):
         '''
         Return _ConnectionCtx object that can be used by 'with' statement:
