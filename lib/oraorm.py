@@ -110,18 +110,18 @@ _triggers = frozenset(['pre_insert', 'pre_update', 'pre_delete'])
 
 
 def _gen_sql(table_name, mappings):
-    pk = None
+    pk = {}
     sql = ['-- generating SQL for %s:' % table_name, 'create table %s (' % table_name]
-    for f in sorted(mappings.values(), lambda x, y: cmp(x._order, y._order)):
-        if not hasattr(f, 'ddl'):
-            raise StandardError('no ddl in field "%s".' % f.name)
-        ddl = f.ddl
-        nullable = f.nullable
-        if f.primary_key:
-            pk = f.name
-        sql.append(nullable and '  %s %s,' % (f.name, ddl) or '  %s %s not null,' % (f.name, ddl))
+    for k, v in sorted(mappings.items(), lambda x, y: cmp(x[1]._order, y[1]._order)):
+        if not hasattr(v, 'ddl'):
+            raise StandardError('no ddl in field "%s".' % v.name)
+        ddl = v.ddl
+        nullable = v.nullable
+        if v.primary_key:
+            pk[k] = v
+        sql.append(nullable and '  %s %s,' % (v.name, ddl) or '  %s %s not null,' % (v.name, ddl))
     # sql.append('  primary key(%s)' % pk)
-    sql = sql[:-1]
+    # sql = sql[:-1]
     sql.append(');')
     sql.append('alert table %s add constraint PK_%s primary key (%s);' % (table_name, table_name, pk))
     return '\n'.join(sql)
@@ -145,8 +145,8 @@ class ModelMetaclass(type):
 
         logging.info('Scan ORMapping %s...' % name)
         mappings = dict()
-        primary_key = None
-        primary_key_attr = None
+        primary_key = {}
+        # primary_key_attr = None
         for k, v in attrs.iteritems():
             if isinstance(v, Field):
                 if not v.name:
@@ -154,16 +154,16 @@ class ModelMetaclass(type):
                 logging.info('Found mapping: %s => %s' % (k, v))
                 # check duplicate primary key:
                 if v.primary_key:
-                    if primary_key:
-                        raise TypeError('Cannot define more than 1 primary key in class: %s' % name)
+                    # if primary_key:
+                    #     raise TypeError('Cannot define more than 1 primary key in class: %s' % name)
                     if v.updatable:
                         logging.warning('NOTE: change primary key to non-updatable.')
                         v.updatable = False
                     if v.nullable:
                         logging.warning('NOTE: change primary key to non-nullable.')
                         v.nullable = False
-                    primary_key = v
-                    primary_key_attr = k
+                    primary_key[k] = v
+                    # primary_key_attr = k
                 mappings[k] = v
         # check exist of primary key:
         if not primary_key:
@@ -174,7 +174,7 @@ class ModelMetaclass(type):
             attrs['__table__'] = name.lower()
         attrs['__mappings__'] = mappings
         attrs['__primary_key__'] = primary_key
-        attrs['__primary_key_attr__'] = primary_key_attr
+        # attrs['__primary_key_attr__'] = primary_key_attr
         attrs['__sql__'] = lambda self: _gen_sql(attrs['__table__'], mappings)
         for trigger in _triggers:
             if not trigger in attrs:
@@ -248,7 +248,14 @@ class Model(dict):
         '''
         Get by primary key.
         '''
-        d = cls.db.select_one('select * from %s where %s=:pk' % (cls.__table__, cls.__primary_key__.name), {'pk': pk})
+        sql = 'select * from %s where' % cls.__table__
+        pkfields = []
+        for k,v in cls.__primary_key__.items():
+            pkfields.append('%s=:%s' % (v.name, k))
+            if k not in pk:
+                raise AttributeError(r"no pk field %s" % k)
+        sql = '%s %s' % (sql, ' and '.join(pkfields))
+        d = cls.db.select_one(sql, pk)
         return cls(**d) if d else None
 
     @classmethod
@@ -350,7 +357,7 @@ if __name__=='__main__':
 
     sql = 'select sysdate from dual'
 
-    with oradb.connection(ktdb.db_ctx):
+    with ktdb:
         sysdate = ktdb.select_one('select sysdate from dual')
         print(sysdate)
 

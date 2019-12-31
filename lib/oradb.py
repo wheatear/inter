@@ -122,9 +122,6 @@ class _LasyConnection(object):
             connection.close()
 
 
-engine = None
-
-
 class _DbCtx(threading.local):
     '''
     Thread local object that holds connection info.
@@ -147,6 +144,11 @@ class _DbCtx(threading.local):
         self.transactions = 0
 
     def cleanup(self):
+        for cur_name in self.dCur:
+            cur = self.dCur[cur_name]
+            cur.close()
+        self.dCur.clear()
+        self.dSql.clear()
         self.connection.cleanup()
         self.connection = None
 
@@ -246,6 +248,20 @@ class _CursorCtx(object):
 
     def __enter__(self):
         logging.info('enter cursor_ctx <%s>...', hex(id(self)))
+        return self.prepare()
+
+    def __exit__(self, exctype, excvalue, traceback):
+        logging.info('exit cursor_ctx <%s>.', hex(id(self)))
+        # if self.cur_cleanup:
+        #     self.cur.close()
+        #     self.cur = None
+        #     self.db_ctx.dCur.pop(self.sql_name)
+        #     self.db_ctx.dSql.pop(self.sql_name)
+        if self.db_ctx_cleanup:
+            self.db_ctx.cleanup()
+
+    def prepare(self):
+        logging.info('prepare cursor: %s...', self.sql)
         self.db_ctx_cleanup = False
         self.cur_cleanup = False
         if not self.db_ctx.is_init():
@@ -260,13 +276,13 @@ class _CursorCtx(object):
         self.cur = self.db_ctx.dCur[self.sql_name]
         return self
 
-    def __exit__(self, exctype, excvalue, traceback):
-        logging.info('exit cursor_ctx <%s>.', hex(id(self)))
-        # if self.cur_cleanup:
-        #     self.cur.close()
-        #     self.cur = None
-        #     self.db_ctx.dCur.pop(self.sql_name)
-        #     self.db_ctx.dSql.pop(self.sql_name)
+    def close(self):
+        logging.info('close cursor: %s.', self.sql)
+        if self.cur_cleanup:
+            self.cur.close()
+            self.cur = None
+            self.db_ctx.dCur.pop(self.sql_name)
+            self.db_ctx.dSql.pop(self.sql_name)
         if self.db_ctx_cleanup:
             self.db_ctx.cleanup()
 
