@@ -244,19 +244,49 @@ class Model(dict):
         self[key] = value
 
     @classmethod
+    def init_from_db(cls, d_args):
+        dic = {}
+        for k,v in cls.__mappings__:
+            dic[k] = d_args.get(v.name, None)
+        return cls(**dic) if dic else None
+
+    @classmethod
+    def get_dbfield_name(cls):
+        fields = []
+        pks = []
+        for k, v in sorted(cls.__mappings__.items(), lambda x, y: cmp(x[1]._order, y[1]._order)):
+            fields.append(v.name)
+            if v.primary_key:
+                pks.append('%s=:%s' % (v.name, k))
+        return (fields, pks)
+
+    @classmethod
+    def dump2db(cls, d_args):
+        d = {}
+        if not d_args:
+            return d
+        for k,v in d_args.items():
+            d[cls.__mappings__[k].name] = v
+        return d
+
+    @classmethod
     def get(cls, pk):
         '''
         Get by primary key.
         '''
-        sql = 'select * from %s where' % cls.__table__
-        pkfields = []
-        for k,v in cls.__primary_key__.items():
-            pkfields.append('%s=:%s' % (v.name, k))
-            if k not in pk:
-                raise AttributeError(r"no pk field %s" % k)
-        sql = '%s %s' % (sql, ' and '.join(pkfields))
+        fields, where = cls.get_dbfield_name()
+        sql = 'select %s from %s where %s' % (','.join(fields), cls.__table__, ' and '.join(where))
+
+        # sql = 'select * from %s where' % cls.__table__
+        # pkfields = []
+        # for k,v in cls.__primary_key__.items():
+        #     pkfields.append('%s=:%s' % (v.name, k))
+        #     if k not in pk:
+        #         raise AttributeError(r"no pk field %s" % k)
+        # sql = '%s %s' % (sql, ' and '.join(pkfields))
+
         d = cls.db.select_one(sql, pk)
-        return cls(**d) if d else None
+        return cls.init_from_db(**d)
 
     @classmethod
     def find_first(cls, where, d_args):
@@ -264,7 +294,8 @@ class Model(dict):
         Find by where clause and return one result. If multiple results found, 
         only the first one returned. If no result found, return None.
         '''
-        d = cls.db.select_one('select * from %s %s' % (cls.__table__, where), d_args)
+        fields, pks = cls.get_dbfield_name()
+        d = cls.db.select_one('select %s from %s %s' % (','.join(fields), cls.__table__, where), d_args)
         return cls(**d) if d else None
 
     @classmethod
