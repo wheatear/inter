@@ -248,13 +248,20 @@ class Model(dict):
 
     @classmethod
     def get_dbfield_name(cls):
-        fields = []
-        pks = []
+        a_fields = []
+        # pks = []
         for k, v in sorted(cls.__mappings__.items(), lambda x, y: cmp(x[1]._order, y[1]._order)):
-            fields.append(v.name)
-            if v.primary_key:
-                pks.append('%s=:%s' % (v.name, k))
-        return (fields, pks)
+            a_fields.append(v.name)
+            # if v.primary_key:
+            #     pks.append('%s=:%s' % (v.name, k))
+        return a_fields
+
+    @classmethod
+    def get_dbpk_name(cls):
+        a_pks = []
+        for k, v in sorted(cls.__primary_key__.items(), lambda x, y: cmp(x[1]._order, y[1]._order)):
+            a_pks.append(v.name)
+        return a_pks
 
     @classmethod
     def dump2db(cls, d_args):
@@ -277,8 +284,11 @@ class Model(dict):
         '''
         Get by primary key.
         '''
-        fields, where = cls.get_dbfield_name()
-        sql = 'select %s from %s where %s' % (','.join(fields), cls.__table__, ' and '.join(where))
+        a_fields = cls.get_dbfield_name()
+        a_pks = []
+        for k, v in sorted(cls.__primary_key__.items(), lambda x, y: cmp(x[1]._order, y[1]._order)):
+            a_pks.append('%s=:%s' % (v.name, k))
+        sql = 'select %s from %s where %s' % (','.join(a_fields), cls.__table__, ' and '.join(a_pks))
 
         # sql = 'select * from %s where' % cls.__table__
         # pkfields = []
@@ -297,8 +307,8 @@ class Model(dict):
         Find by where clause and return one result. If multiple results found, 
         only the first one returned. If no result found, return None.
         '''
-        fields, pks = cls.get_dbfield_name()
-        d = cls.db.select_one('select %s from %s %s' % (','.join(fields), cls.__table__, where), d_args)
+        a_fields = cls.get_dbfield_name()
+        d = cls.db.select_one('select %s from %s %s' % (','.join(a_fields), cls.__table__, where), d_args)
         return cls.load_from_db(**d)
 
     @classmethod
@@ -306,8 +316,8 @@ class Model(dict):
         '''
         Find all and return list.
         '''
-        fields, pks = cls.get_dbfield_name()
-        L = cls.db.select('select %s from %s' % (','.join(fields), cls.__table__))
+        a_fields = cls.get_dbfield_name()
+        L = cls.db.select('select %s from %s' % (','.join(a_fields), cls.__table__))
         return [cls.load_from_db(**d) for d in L]
 
     @classmethod
@@ -315,8 +325,8 @@ class Model(dict):
         '''
         Find by where clause and return list.
         '''
-        fields, pks = cls.get_dbfield_name()
-        L = cls.db.select('select %s from %s %s' % (','.join(fields), cls.__table__, where), d_args)
+        a_fields = cls.get_dbfield_name()
+        L = cls.db.select('select %s from %s %s' % (','.join(a_fields), cls.__table__, where), d_args)
         return [cls.load_from_db(**d) for d in L]
 
     @classmethod
@@ -336,32 +346,40 @@ class Model(dict):
     def update(self):
         self.pre_update and self.pre_update()
         L = []
-        d_arg = {}
+        d_field = {}
+        P = []
         for k, v in self.__mappings__.iteritems():
             if v.updatable:
                 if hasattr(self, k):
-                    d_arg[v.name] = getattr(self, k)
+                    d_field[v.name] = getattr(self, k)
                 else:
-                    d_arg[v.name] = v.default
+                    d_field[v.name] = v.default
                     setattr(self, k, v.default)
                 L.append('%s=:%s' % (v.name, v.name))
-                # if v.primary_key:
+            if v.primary_key:
+                d_field[v.name] = getattr(self, k)
+                P.append('%s=:%s' % (v.name, v.name))
 
                 # args.append(arg)
             # if v.primary_key:
             #     d_arg[v.name] = getattr(self, k)
-        pk = self.__primary_key__.name
-        d_arg[pk] = getattr(self, self.__primary_key_attr__)
+        # pk = self.__primary_key__.name
+        # d_arg[pk] = getattr(self, self.__primary_key_attr__)
         # args.append(getattr(self, pk))
-        self.db.update('update %s set %s where %s=:%s' % (self.__table__, ','.join(L), pk, pk), d_arg)
+        sql = 'update %s set %s where %s' % (self.__table__, ','.join(L), ' and '.join(P))
+        self.db.update(sql, d_field)
         return self
 
     def delete(self):
         self.pre_delete and self.pre_delete()
-        pk = self.__primary_key__.name
-        d_arg = {self.__primary_key_attr__: getattr(self, pk)}
-        # args = (getattr(self, pk), )
-        self.db.update('delete from %s where %s=:%s' % (self.__table__, pk, pk), d_arg)
+        # pk = self.__primary_key__.name
+        a_pk_name = []
+        d_pk_value = {}
+        for k, v in sorted(cls.__primary_key__.items(), lambda x, y: cmp(x[1]._order, y[1]._order)):
+            a_pk_name.append('%s=:%s' % (v.name, v.name))
+            d_pk_value[v.name] = getattr(self, k)
+        sql = 'delete from %s where %s' % (self.__table__, ' and '.join(a_pk_name))
+        self.db.update(sql, d_pk_value)
         return self
 
     def insert(self):
@@ -372,8 +390,60 @@ class Model(dict):
                 if not hasattr(self, k):
                     setattr(self, k, v.default)
                 params[v.name] = getattr(self, k)
-        self.db.insert('%s' % self.__table__, params)
+        self.db.insert(self.__table__, params)
         return self
+
+    def get_update_sql(self):
+        self.pre_update and self.pre_update()
+        L = []
+        d_field = {}
+        P = []
+        for k, v in self.__mappings__.iteritems():
+            if v.updatable:
+                if hasattr(self, k):
+                    d_field[v.name] = getattr(self, k)
+                    L.append("%s=':%s'" % (v.name, v.name))
+                # else:
+                #     d_field[v.name] = v.default
+                #     setattr(self, k, v.default)
+                L.append("%s=':%s'" % (v.name, v.name))
+            if v.primary_key:
+                d_field[v.name] = getattr(self, k)
+                P.append("%s=':%s'" % (v.name, v.name))
+        sql = "update %s set %s where %s" % (self.__table__, ','.join(L), ' and '.join(P))
+        for k,v in d_field:
+            str = ':%s' % k
+            sql = sql.replace(str, v)
+        return sql
+
+    def get_insert_sql(self):
+        self.pre_insert and self.pre_insert()
+        a_fields = []
+        d_params = {}
+        for k, v in self.__mappings__.iteritems():
+            if v.insertable:
+                if not hasattr(self, k):
+                    setattr(self, k, v.default)
+                a_fields.append(v.name)
+                d_params[v.name] = getattr(self, k)
+        sql = "insert into %s(%s) values(%s)" % (self.__table__, ",".join(a_fields), ",".join(["':%s'" % col for col in a_fields]))
+        for k,v in d_params:
+            str = ':%s' % k
+            sql = sql.replace(str, v)
+        return sql
+
+    def get_delete_sql(self):
+        self.pre_delete and self.pre_delete()
+        a_pk_name = []
+        d_pk_value = {}
+        for k, v in sorted(cls.__primary_key__.items(), lambda x, y: cmp(x[1]._order, y[1]._order)):
+            a_pk_name.append("%s=':%s'" % (v.name, v.name))
+            d_pk_value[v.name] = getattr(self, k)
+        sql = 'delete from %s where %s' % (self.__table__, ' and '.join(a_pk_name))
+        for k,v in d_pk_value:
+            str = ':%s' % k
+            sql = sql.replace(str, v)
+        return sql
 
 
 class Tmp_ps(Model):
