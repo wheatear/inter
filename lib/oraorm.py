@@ -233,6 +233,9 @@ class Model(dict):
 
     def __init__(self, **kw):
         super(Model, self).__init__(**kw)
+        for k,v in self.__mappings__.items:
+            if k not in kw:
+                self[k] = v.default
 
     def __getattr__(self, key):
         try:
@@ -342,6 +345,8 @@ class Model(dict):
                     d_arg[v.name] = v.default
                     setattr(self, k, v.default)
                 L.append('%s=:%s' % (v.name, v.name))
+                # if v.primary_key:
+
                 # args.append(arg)
             # if v.primary_key:
             #     d_arg[v.name] = getattr(self, k)
