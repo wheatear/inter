@@ -244,13 +244,6 @@ class Model(dict):
         self[key] = value
 
     @classmethod
-    def init_from_db(cls, d_args):
-        dic = {}
-        for k,v in cls.__mappings__:
-            dic[k] = d_args.get(v.name, None)
-        return cls(**dic) if dic else None
-
-    @classmethod
     def get_dbfield_name(cls):
         fields = []
         pks = []
@@ -270,6 +263,13 @@ class Model(dict):
         return d
 
     @classmethod
+    def load_from_db(cls, d_args):
+        dic = {}
+        for k,v in cls.__mappings__:
+            dic[k] = d_args.get(v.name, None)
+        return cls(**dic) if dic else None
+
+    @classmethod
     def get(cls, pk):
         '''
         Get by primary key.
@@ -286,7 +286,7 @@ class Model(dict):
         # sql = '%s %s' % (sql, ' and '.join(pkfields))
 
         d = cls.db.select_one(sql, pk)
-        return cls.init_from_db(**d)
+        return cls.load_from_db(**d)
 
     @classmethod
     def find_first(cls, where, d_args):
@@ -296,23 +296,25 @@ class Model(dict):
         '''
         fields, pks = cls.get_dbfield_name()
         d = cls.db.select_one('select %s from %s %s' % (','.join(fields), cls.__table__, where), d_args)
-        return cls(**d) if d else None
+        return cls.load_from_db(**d)
 
     @classmethod
     def find_all(cls, *args):
         '''
         Find all and return list.
         '''
-        L = cls.db.select('select * from %s' % cls.__table__)
-        return [cls(**d) for d in L]
+        fields, pks = cls.get_dbfield_name()
+        L = cls.db.select('select %s from %s' % (','.join(fields), cls.__table__))
+        return [cls.load_from_db(**d) for d in L]
 
     @classmethod
     def find_by(cls, where, d_args):
         '''
         Find by where clause and return list.
         '''
-        L = cls.db.select('select * from %s %s' % (cls.__table__, where), d_args)
-        return [cls(**d) for d in L]
+        fields, pks = cls.get_dbfield_name()
+        L = cls.db.select('select %s from %s %s' % (','.join(fields), cls.__table__, where), d_args)
+        return [cls.load_from_db(**d) for d in L]
 
     @classmethod
     def count_all(cls):
