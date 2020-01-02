@@ -279,7 +279,6 @@ class Model(dict):
         dic = {}
         for k,v in cls.__mappings__.items():
             dic[k] = d_args.get(v.name, None)
-            print('field: %s %s' % (k, d_args.get(v.name)))
         return cls(**dic) if dic else None
 
     @classmethod
@@ -292,7 +291,6 @@ class Model(dict):
         for k, v in sorted(cls.__primary_key__.items(), lambda x, y: cmp(x[1]._order, y[1]._order)):
             a_pks.append('%s=:%s' % (v.name, k))
         sql = 'select %s from %s where %s' % (','.join(a_fields), cls.__table__, ' and '.join(a_pks))
-        print('get sql: %s:(%s)' % (sql, pk))
         # sql = 'select * from %s where' % cls.__table__
         # pkfields = []
         # for k,v in cls.__primary_key__.items():
@@ -302,7 +300,6 @@ class Model(dict):
         # sql = '%s %s' % (sql, ' and '.join(pkfields))
 
         d = cls.db.select_one(sql, pk)
-        print('result: %s' % d)
         return cls.load_from_db(d)
 
     @classmethod
@@ -371,7 +368,6 @@ class Model(dict):
         # d_arg[pk] = getattr(self, self.__primary_key_attr__)
         # args.append(getattr(self, pk))
         sql = 'update %s set %s where %s' % (self.__table__, ','.join(L), ' and '.join(P))
-        print('sql: %s (%s)' % (sql, d_field))
         self.db.update(sql, d_field)
         return self
 
@@ -472,11 +468,11 @@ if __name__=='__main__':
 
     with ktdb:
         sysdate = ktdb.select_one('select sysdate from dual')
-        print(sysdate)
+        logging.info(sysdate)
 
         pk = {'ps_id': 103258}
         tmp_ps = Tmp_ps.get(pk)
-        print('type: %s' % type(tmp_ps))
+        logging.info('type: %s' % type(tmp_ps))
         print(tmp_ps)
         print('ps_id: %d, bill_id: %s, ps_param: %s' % (tmp_ps.ps_id, tmp_ps.bill_id, tmp_ps.ps_param))
         tmp_ps.ps_param += ' test;'

@@ -244,7 +244,6 @@ class _CursorCtx(object):
         self.sql_name = get_sql_key(sql)
         self.cur = None
         self.db_ctx = db_ctx
-        print('db_ctx: %s' % db_ctx)
         if not db_ctx:
             self.db_ctx = _db_ctx
         # if not self.db_ctx.is_init():
@@ -292,6 +291,8 @@ class _CursorCtx(object):
 
     def _select(self, first, d_arg):
         logging.info('SQL: %s, ARGS: %s' % (self.sql, d_arg))
+        if not self.cur:
+            self.__enter__()
         try:
             if d_arg:
                 self.cur.execute(None, d_arg)
@@ -336,6 +337,8 @@ class _CursorCtx(object):
     def _update(self, d_arg):
         # sql = sql.replace('?', '%s')
         logging.info('SQL: %s, ARGS: %s' % (self.sql, d_arg))
+        if not self.cur:
+            self.__enter__()
         try:
             if d_arg:
                 self.cur.execute(None, d_arg)
@@ -1028,7 +1031,6 @@ class Db(object):
 
     def _update(self, sql, d_arg):
         cursor = self.cursor(sql)
-        cursor.prepare()
         return cursor._update(d_arg)
         # sql = sql.replace('?', '%s')
         logging.info('SQL: %s, ARGS: %s' % (sql, d_arg))
