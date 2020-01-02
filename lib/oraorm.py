@@ -150,7 +150,9 @@ class ModelMetaclass(type):
         for k, v in attrs.iteritems():
             if isinstance(v, Field):
                 if not v.name:
-                    v.name = k
+                    v.name = k.upper()
+                else:
+                    v.name = v.name.upper()
                 logging.info('Found mapping: %s => %s' % (k, v))
                 # check duplicate primary key:
                 if v.primary_key:
@@ -233,7 +235,7 @@ class Model(dict):
 
     def __init__(self, **kw):
         super(Model, self).__init__(**kw)
-        for k,v in self.__mappings__.items:
+        for k,v in self.__mappings__.items():
             if k not in kw:
                 self[k] = v.default
 
@@ -275,8 +277,9 @@ class Model(dict):
     @classmethod
     def load_from_db(cls, d_args):
         dic = {}
-        for k,v in cls.__mappings__:
+        for k,v in cls.__mappings__.items():
             dic[k] = d_args.get(v.name, None)
+            print('field: %s %s' % (k, d_args.get(v.name)))
         return cls(**dic) if dic else None
 
     @classmethod
@@ -289,7 +292,7 @@ class Model(dict):
         for k, v in sorted(cls.__primary_key__.items(), lambda x, y: cmp(x[1]._order, y[1]._order)):
             a_pks.append('%s=:%s' % (v.name, k))
         sql = 'select %s from %s where %s' % (','.join(a_fields), cls.__table__, ' and '.join(a_pks))
-
+        print('get sql: %s:(%s)' % (sql, pk))
         # sql = 'select * from %s where' % cls.__table__
         # pkfields = []
         # for k,v in cls.__primary_key__.items():
@@ -299,7 +302,8 @@ class Model(dict):
         # sql = '%s %s' % (sql, ' and '.join(pkfields))
 
         d = cls.db.select_one(sql, pk)
-        return cls.load_from_db(**d)
+        print('result: %s' % d)
+        return cls.load_from_db(d)
 
     @classmethod
     def find_first(cls, where, d_args):
@@ -367,6 +371,7 @@ class Model(dict):
         # d_arg[pk] = getattr(self, self.__primary_key_attr__)
         # args.append(getattr(self, pk))
         sql = 'update %s set %s where %s' % (self.__table__, ','.join(L), ' and '.join(P))
+        print('sql: %s (%s)' % (sql, d_field))
         self.db.update(sql, d_field)
         return self
 
@@ -375,7 +380,7 @@ class Model(dict):
         # pk = self.__primary_key__.name
         a_pk_name = []
         d_pk_value = {}
-        for k, v in sorted(cls.__primary_key__.items(), lambda x, y: cmp(x[1]._order, y[1]._order)):
+        for k, v in sorted(self.__primary_key__.items(), lambda x, y: cmp(x[1]._order, y[1]._order)):
             a_pk_name.append('%s=:%s' % (v.name, v.name))
             d_pk_value[v.name] = getattr(self, k)
         sql = 'delete from %s where %s' % (self.__table__, ' and '.join(a_pk_name))
@@ -436,7 +441,7 @@ class Model(dict):
         self.pre_delete and self.pre_delete()
         a_pk_name = []
         d_pk_value = {}
-        for k, v in sorted(cls.__primary_key__.items(), lambda x, y: cmp(x[1]._order, y[1]._order)):
+        for k, v in sorted(self.__primary_key__.items(), lambda x, y: cmp(x[1]._order, y[1]._order)):
             a_pk_name.append("%s=':%s'" % (v.name, v.name))
             d_pk_value[v.name] = getattr(self, k)
         sql = 'delete from %s where %s' % (self.__table__, ' and '.join(a_pk_name))
@@ -469,10 +474,15 @@ if __name__=='__main__':
         sysdate = ktdb.select_one('select sysdate from dual')
         print(sysdate)
 
-        tmp_ps = Tmp_ps.get(103258)
+        pk = {'ps_id': 103258}
+        tmp_ps = Tmp_ps.get(pk)
         print('type: %s' % type(tmp_ps))
         print(tmp_ps)
         print('ps_id: %d, bill_id: %s, ps_param: %s' % (tmp_ps.ps_id, tmp_ps.bill_id, tmp_ps.ps_param))
+        tmp_ps.ps_param += ' test;'
+        tmp_ps.update()
+        tmp_ps.ps_id -= 1
+        tmp_ps.insert()
 
         # time.sleep(1)
         # with _CursorCtx(sql, ktdb.db_ctx) as curCtx:
