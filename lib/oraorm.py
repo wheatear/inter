@@ -401,16 +401,14 @@ class Model(dict):
         P = []
         for k, v in sorted(self.__mappings__.items(), lambda x, y: cmp(x[1]._order, y[1]._order)):
             if v.updatable:
-                if hasattr(self, k):
-                    val = getattr(self, k)
-                    if v.dump_format:
-                        dump_value = v.dump_format % val
-                        L.append("%s=%s" % (v.name, dump_value))
-                    else:
-                        L.append("%s='%s'" % (v.name, val))
-                # else:
-                #     d_field[v.name] = v.default
-                #     setattr(self, k, v.default)
+                if not hasattr(self, k):
+                    setattr(self, k, v.default)
+                val = getattr(self, k)
+                if v.dump_format:
+                    dump_value = v.dump_format % val
+                    L.append("%s=%s" % (v.name, dump_value))
+                else:
+                    L.append("%s='%s'" % (v.name, val))
             if v.primary_key:
                 val = getattr(self, k)
                 if v.dump_format:
@@ -425,29 +423,32 @@ class Model(dict):
         self.pre_insert and self.pre_insert()
         a_fields = []
         d_params = {}
+        a_params = []
         for k, v in sorted(self.__mappings__.items(), lambda x, y: cmp(x[1]._order, y[1]._order)):
             if v.insertable:
                 if not hasattr(self, k):
                     setattr(self, k, v.default)
+                val = getattr(self, k)
+                if v.dump_format:
+                    dump_value = v.dump_format % val
+                    a_params.append(dump_value)
+                else:
+                    a_params.append("'%s'" % val)
                 a_fields.append(v.name)
-                d_params[v.name] = getattr(self, k)
-        sql = "insert into %s(%s) values(%s)" % (self.__table__, ",".join(a_fields), ",".join(["':%s'" % col for col in a_fields]))
-        for k,v in d_params:
-            str = ':%s' % k
-            sql = sql.replace(str, v)
+        sql = "insert into %s(%s) values(%s)" % (self.__table__, ",".join(a_fields), ",".join(a_params))
         return sql
 
     def get_delete_sql(self):
         self.pre_delete and self.pre_delete()
-        a_pk_name = []
-        d_pk_value = {}
+        a_pk = []
         for k, v in sorted(self.__primary_key__.items(), lambda x, y: cmp(x[1]._order, y[1]._order)):
-            a_pk_name.append("%s=':%s'" % (v.name, v.name))
-            d_pk_value[v.name] = getattr(self, k)
-        sql = 'delete from %s where %s' % (self.__table__, ' and '.join(a_pk_name))
-        for k,v in d_pk_value:
-            str = ':%s' % k
-            sql = sql.replace(str, v)
+            val = getattr(self, k)
+            if v.dump_format:
+                dump_value = v.dump_format % val
+                a_pk.append("%s=%s" % (v.name, dump_value))
+            else:
+                a_pk.append("%s='%s'" % (v.name, val))
+        sql = 'delete from %s where %s' % (self.__table__, ' and '.join(a_pk))
         return sql
 
 
