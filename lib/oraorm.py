@@ -23,6 +23,7 @@ class Field(object):
         self.updatable = kw.get('updatable', True)
         self.insertable = kw.get('insertable', True)
         self.ddl = kw.get('ddl', '')
+        self.dump_format = kw.get('dump_format', None)
         self._order = Field._count
         Field._count = Field._count + 1
 
@@ -397,31 +398,34 @@ class Model(dict):
     def get_update_sql(self):
         self.pre_update and self.pre_update()
         L = []
-        d_field = {}
         P = []
-        for k, v in self.__mappings__.iteritems():
+        for k, v in sorted(self.__mappings__.items(), lambda x, y: cmp(x[1]._order, y[1]._order)):
             if v.updatable:
                 if hasattr(self, k):
-                    d_field[v.name] = getattr(self, k)
-                    L.append("%s=':%s'" % (v.name, v.name))
+                    val = getattr(self, k)
+                    if v.dump_format:
+                        dump_value = v.dump_format % val
+                        L.append("%s=%s" % (v.name, dump_value))
+                    else:
+                        L.append("%s='%s'" % (v.name, val))
                 # else:
                 #     d_field[v.name] = v.default
                 #     setattr(self, k, v.default)
-                L.append("%s=':%s'" % (v.name, v.name))
             if v.primary_key:
-                d_field[v.name] = getattr(self, k)
-                P.append("%s=':%s'" % (v.name, v.name))
+                val = getattr(self, k)
+                if v.dump_format:
+                    dump_value = v.dump_format % val
+                    P.append("%s=%s" % (v.name, dump_value))
+                else:
+                    P.append("%s='%s'" % (v.name, val))
         sql = "update %s set %s where %s" % (self.__table__, ','.join(L), ' and '.join(P))
-        for k,v in d_field:
-            str = ':%s' % k
-            sql = sql.replace(str, v)
         return sql
 
     def get_insert_sql(self):
         self.pre_insert and self.pre_insert()
         a_fields = []
         d_params = {}
-        for k, v in self.__mappings__.iteritems():
+        for k, v in sorted(self.__mappings__.items(), lambda x, y: cmp(x[1]._order, y[1]._order)):
             if v.insertable:
                 if not hasattr(self, k):
                     setattr(self, k, v.default)
