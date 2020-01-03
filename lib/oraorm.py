@@ -448,6 +448,7 @@ class Model(dict):
 
 
 class Tmp_ps(Model):
+    __table__ = 'tmp_ps'
     ps_id = IntegerField(ddl='NUMBER(15)', primary_key=True)
     bill_id = StringField(ddl='VARCHAR2(64)')
     ps_param = StringField(ddl='VARCHAR2(4000)')
