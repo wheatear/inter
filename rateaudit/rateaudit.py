@@ -459,29 +459,6 @@ class Main(object):
 
         if self.argc > 1:
             self.inFileName = sys.argv[1]
-        # if self.argc < 3:
-        #     self.usage()
-        # # self.checkopt()
-        # argvs = sys.argv[1:]
-        # self.facType = 'f'
-        # try:
-        #     opts, arvs = getopt.getopt(argvs, "t:p:")
-        # except getopt.GetoptError, e:
-        #     orderMode = 't'
-        #     print 'get opt error:%s. %s' % (argvs,e)
-        #     # self.usage()
-        # for opt, arg in opts:
-        #     # print 'opt: %s' % opt
-        #     if opt == '-t':
-        #         self.facType = 't'
-        #         self.cmdFileName = arg
-        #     elif opt == '-p':
-        #         self.psId = arg
-        # if self.facType == 'f':
-        #     self.cmdFileName = arvs[0]
-        #     self.inFileName = arvs[1]
-        # else:
-        #     self.dsIn = arvs[0]
 
     def parseWorkEnv(self):
         # self.dirBin = os.path.join(self.dirBase, 'bin')
@@ -520,7 +497,7 @@ class Main(object):
         self.cfg = configparser.ConfigParser()
         self.cfg.read(self.cfgFile)
         self.dDbInfo = {}
-        self.dNetTypes = {}
+        # self.dNetTypes = {}
 
         if 'db' not in self.cfg.sections():
             # logging.fatal('there is no db info in confige file')
@@ -539,23 +516,9 @@ class Main(object):
         self.dsIn = os.path.join(self.dirInput, self.inFileName)
         self.logFile = os.path.join(self.dirLog, '%s_%s.log' % (self.appNameBody, self.today))
 
-        # # logging.info("load nettype and netinfo")
-        # for sec in self.cfg.sections():
-        #     # print(sec)
-        #     # print(self.cfg.options(sec))
-        #     if "nettype" in self.cfg.options(sec):
-        #         nt = self.cfg.get(sec,"nettype")
-        #         netInfo = {}
-        #         for ntin in self.cfg.items(sec):
-        #             netInfo[string.upper(ntin[0])] = ntin[1]
-        #         if nt in self.dNetTypes:
-        #             self.dNetTypes[nt].append(netInfo)
-        #         else:
-        #             self.dNetTypes[nt] = [netInfo]
-
     def usage(self):
-        print("Usage: %s [HMD_NonSZXA_file]" % self.appName)
-        print("example:   %s %s" % (self.appName,'HMD_NonSZXA_201910.dat'))
+        print("Usage: %s" % self.appName)
+        # print("example:   %s %s" % (self.appName,'HMD_NonSZXA_201910.dat'))
         exit(1)
 
     def openFile(self, fileName, mode):

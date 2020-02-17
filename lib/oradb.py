@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-__author__ = 'Michael Liao'
+__author__ = 'wangxt5'
 
 '''
 Database operation module.
@@ -849,7 +849,7 @@ class Db(object):
         if sid:
             dsn = orcl.makedsn(host, port, sid=sid)
         elif service_name:
-            dsn = orcl.makedsn(host, port, service_name=dbconf.get('service_name'))
+            dsn = orcl.makedsn(host, port, service_name=service_name)
         dbconf['dsn'] = dsn
         eng = _Engine(lambda: orcl.connect(**dbconf))
         logging.info('Init oracle engine <%s> ok.' % hex(id(eng)))
