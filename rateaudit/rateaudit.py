@@ -25,7 +25,7 @@ import signal
 import logging
 from socket import *
 import cx_Oracle as orcl
-import ConfigParser
+import configparser
 import shutil
 
 
@@ -517,7 +517,7 @@ class Main(object):
         #     self.dsIn = os.path.join(self.dirInput, self.inFileName)
 
     def readCfg(self):
-        self.cfg = ConfigParser.ConfigParser()
+        self.cfg = configparser.ConfigParser()
         self.cfg.read(self.cfgFile)
         self.dDbInfo = {}
         self.dNetTypes = {}
