@@ -144,8 +144,7 @@ class _DbCtx(threading.local):
         self.transactions = 0
 
     def cleanup(self):
-        for cur_name in self.dCur:
-            cur = self.dCur[cur_name]
+        for cur_name,cur in self.dCur.items():
             cur.close()
         self.dCur.clear()
         self.dSql.clear()
@@ -232,10 +231,11 @@ class _CursorCtx(object):
         with connection():
             pass
     '''
-    def __init__(self, sql, db_ctx=None):
+    def __init__(self, sql, persistent=False, db_ctx=None):
         global _db_ctx
         self.sql = sql
         self.sql_name = get_sql_key(sql)
+        self.persistent = persistent
         self.cur = None
         self.db_ctx = db_ctx if db_ctx else _db_ctx
         # if not self.db_ctx.is_init():
@@ -247,11 +247,11 @@ class _CursorCtx(object):
 
     def __exit__(self, exctype, excvalue, traceback):
         logging.info('exit cursor_ctx <%s>.', hex(id(self)))
-        # if self.cur_cleanup:
-        #     self.cur.close()
-        #     self.cur = None
-        #     self.db_ctx.dCur.pop(self.sql_name)
-        #     self.db_ctx.dSql.pop(self.sql_name)
+        if not self.persistent and self.cur_cleanup:
+            self.cur.close()
+            self.cur = None
+            self.db_ctx.dCur.pop(self.sql_name)
+            self.db_ctx.dSql.pop(self.sql_name)
         if self.db_ctx_cleanup:
             self.db_ctx.cleanup()
 
@@ -526,9 +526,7 @@ def with_connection(func, db_ctx=None):
         f2()
         f3()
     '''
-    db = db_ctx
-    if not db_ctx:
-        db = _db_ctx
+    db = db_ctx if db_ctx else _db_ctx
     @functools.wraps(func)
     def _wrapper(*args, **kw):
         with _ConnectionCtx(db):

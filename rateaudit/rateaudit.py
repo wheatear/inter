@@ -28,6 +28,8 @@ import cx_Oracle as orcl
 import configparser
 import shutil
 
+import lib.oradb
+
 
 
 class QSub(object):
@@ -299,6 +301,32 @@ class ZgClient(object):
         self.conn.conn.commit()
 
 
+class GetRate(object):
+    '''get rate from table'''
+    def __init__(self, table):
+        self.table = table
+
+
+class RateAudit(object):
+    '''audit rate from 3 tables'''
+    def __init__(self):
+        self.dRate = {}
+        self.consistent = False
+
+    def get_rate(self):
+        for tab,db_name in main.d_table.items():
+            pass
+
+    def audit(self):
+        pass
+
+    def start(self):
+        self.get_rate()
+        self.audit()
+        if self.consistent:
+            print('All rate is consistent in 3 tables.')
+
+
 class Builder(object):
     '''Builder Class for check and save hmd'''
     def __init__(self, main):
@@ -442,10 +470,7 @@ class Main(object):
     def __init__(self):
         self.Name = sys.argv[0]
         self.argc = len(sys.argv)
-        # self.fCmd = None
-        # self.caseDs = None
-        # self.netType = None
-        # self.netCode = None
+        self.dDbcn = {}
         self.conn = None
         # self.psId = None
         self.inFileName = None
@@ -499,22 +524,28 @@ class Main(object):
         self.dDbInfo = {}
         # self.dNetTypes = {}
 
-        if 'db' not in self.cfg.sections():
-            # logging.fatal('there is no db info in confige file')
+        # read db info
+        db_sections = [x for x in self.cfg.sections() if x[:3] == 'db_']
+        if not db_sections:
             print('there is no db info in confige file, exit.')
             exit(-1)
-        for inf in self.cfg.items('db'):
-            self.dDbInfo[inf[0]] = inf[1]
-        # print(self.dDbInfo)
+        for db in db_sections:
+            d_dbinfo = {}
+            for inf in self.cfg.items(db):
+                d_dbinfo[inf[0]] = inf[1]
+            self.dDbInfo[db] = d_dbinfo
 
-        self.dirInput = self.cfg.get("main", "filedir")
-        self.dirBack = self.cfg.get("main", "bakdir")
-        self.dirLog = self.dirInput
-
-        if not self.inFileName:
-            self.inFileName = 'HMD_NonSZXA_%s.dat' % self.lastMonth
-        self.dsIn = os.path.join(self.dirInput, self.inFileName)
-        self.logFile = os.path.join(self.dirLog, '%s_%s.log' % (self.appNameBody, self.today))
+        # read rate audit conf
+        for item in self.cfg.items('db_table_map'):
+            self.d_table[item[0]] = item[1]
+        for item in self.cfg.items('table_sql'):
+            self.d_table_sql[item[0]] = item[1]
+        for item in self.cfg.items('table_rate'):
+            self.d_table_rate[item[0]] = item[1]
+        for item in self.cfg.items('table_rate_convert'):
+            self.d_table_rate_convert[item[0]] = item[1]
+        for item in self.cfg.items('rate_feeid_map'):
+            self.d_rate_feeid_map[item[0]] = item[1]
 
     def usage(self):
         print("Usage: %s" % self.appName)
@@ -530,14 +561,21 @@ class Main(object):
         return f
 
     def connectServer(self):
+        logging.info('make all db needed.')
+        for db,info in self.dDbInfo.items():
+            if db in self.dDbcn:
+                continue
+            self.dDbcn[db] = lib.oradb.Db(info)
+        return self.dDbcn
         if self.conn is not None: return self.conn
         # self.dbinfo['connstr'] = '%s/%s@%s/%s' % (
         # self.dbinfo['dbusr'], self.dbinfo['dbpwd'], self.dbinfo['dbhost'], self.dbinfo['dbsid'])
         # if "db" not in self.cfg.sections():
         #     logging.error("no db configer")
         #     exit(-1)
-        self.conn = DbConn(self.dDbInfo)
-        self.conn.connectServer()
+        # self.conn = DbConn(self.dDbInfo)
+        # self.conn.connectServer()
+        self.conn = lib.oradb.Db(self.dDbInfo['db_main'])
         return self.conn
 
     # def connDb(self):
@@ -586,7 +624,7 @@ class Main(object):
 
         # self.logLevel = eval(logLevel)
         self.logLevel = eval('logging.%s' % self.cfg.get("main", "loglevel"))
-        print('loglevel: %s, logfile: %s' %(self.logLevel, self.logFile))
+        # print('loglevel: %s, logfile: %s' %(self.logLevel, self.logFile))
         logging.basicConfig(filename=self.logFile, level=self.logLevel, format='%(asctime)s %(levelname)s %(message)s', datefmt='%Y%m%d%H%M%S')
         logging.info('%s starting...', self.appName)
         print('logfile: %s' % self.logFile)
