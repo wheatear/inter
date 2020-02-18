@@ -97,9 +97,7 @@ class _LasyConnection(object):
     def __init__(self, eng=None):
         # global engine
         self.connection = None
-        self.engine = engine
-        if eng:
-            self.engine = eng
+        self.engine = eng if eng else engine
 
     def cursor(self):
         if self.connection is None:
@@ -135,9 +133,7 @@ class _DbCtx(threading.local):
         self.dCur = {}
         self.dSql = {}
         self.transactions = 0
-        self.engine = engine
-        if eng:
-            self.engine = eng
+        self.engine = eng if eng else engine
 
     def is_init(self):
         return not self.connection is None
@@ -210,9 +206,7 @@ class _ConnectionCtx(object):
     '''
     def __init__(self, db_ctx=None):
         global _db_ctx
-        self.db_ctx = db_ctx
-        if not db_ctx:
-            self.db_ctx = _db_ctx
+        self.db_ctx = db_ctx if db_ctx else _db_ctx
 
     def __enter__(self):
         # global _db_ctx
@@ -243,9 +237,7 @@ class _CursorCtx(object):
         self.sql = sql
         self.sql_name = get_sql_key(sql)
         self.cur = None
-        self.db_ctx = db_ctx
-        if not db_ctx:
-            self.db_ctx = _db_ctx
+        self.db_ctx = db_ctx if db_ctx else _db_ctx
         # if not self.db_ctx.is_init():
         #     raise DBError('db_ctx is not initialized.')
 
@@ -381,11 +373,9 @@ class _CursorGrpCtx(object):
     '''
     def __init__(self, d_sql=None, db_ctx=None):
         global _db_ctx
-        self.db_ctx = db_ctx
+        self.db_ctx = db_ctx if db_ctx else _db_ctx
         self.dSql = d_sql
         self.dCur = {}
-        if not db_ctx:
-            self.db_ctx = _db_ctx
         if d_sql:
             for k, v in d_sql.items():
                 self.get_cur(v)
@@ -556,9 +546,7 @@ class _TransactionCtx(object):
 
     def __init__(self, db_ctx=None):
         global _db_ctx
-        self.db_ctx = db_ctx
-        if not db_ctx:
-            self.db_ctx = _db_ctx
+        self.db_ctx = db_ctx if db_ctx else _db_ctx
 
     def __enter__(self):
         # global _db_ctx
