@@ -311,20 +311,85 @@ class RateAudit(object):
     '''audit rate from 3 tables'''
     def __init__(self):
         self.dRate = {}
-        self.consistent = False
+        self.consistent = True
+        self.a_duplicate_item = []
+        self.a_error_rate = []
+        self.a_empty_rate = []
+        self.a_inconsistent_item = []
 
     def get_rate(self):
         for tab,db_name in main.d_table.items():
-            pass
+            a_rates = main.d_table_rate[tab]
+            d_itemrate = {}
+            for ra in a_rates:
+                d_itemrate[ra] = set()
+            self.dRate[tab] = d_itemrate
+
+            db = main.dDbcn[db_name]
+            sql = main.d_table_sql[tab]
+            with db:
+                d_rates = db.select(sql)
+                self.make_rate_set(tab,d_rates)
+
+    def make_rate_set(self, tab, d_rates):
+        a_rate_key = main.d_table_rate[tab]
+        d_itemrate = self.dRate[tab]
+        d_rate_map = None
+        if tab in main.d_table_rate_convert:
+            d_rate_map = main.d_rate_feeid_map
+        for ra in d_rates:
+            item = ra['item']
+            rate = d_rate_map[ra['rate']] if d_rate_map else ra['rate']
+            if rate not in d_itemrate:
+                self.consistent = False
+                self.a_error_rate.append(rate)
+                continue
+            if item in d_itemrate[rate]:
+                self.consistent = False
+                self.a_duplicate_item.append(item)
+                continue
+            d_itemrate[rate].add(item)
+
+        # check empty rate
+        for rk in a_rate_key:
+            if len(d_itemrate[rk]) == 0:
+                self.consistent = False
+                self.a_empty_rate.append(rate)
 
     def audit(self):
-        pass
+        a_rates = set()
+        for tab,rates in main.d_table_rate.items():
+            a_rates.update(rates)
+        a_check = []
+        for r in a_rates:
+            for tab,rates in main.d_table_rate.items():
+                if r in rates:
+                    a_check.append(self.dRate[tab][r])
+
+            base_item = a_check[0]
+            for i in range(1,len(a_check)):
+                if a_check[i] == base_item:
+                    continue
+                exclusive = base_item ^ a_check[i]
+                self.consistent = False
+                self.a_inconsistent_item.extend(exclusive)
+
+
 
     def start(self):
         self.get_rate()
         self.audit()
         if self.consistent:
             print('All rate is consistent in 3 tables.')
+        else:
+            if self.a_duplicate_item:
+                print('费用项重复：%s' % self.a_duplicate_item)
+            if self.a_error_rate:
+                print('错误的税率：%s' % self.a_error_rate)
+            if self.a_empty_rate:
+                print('税率没有费用项：%s' % self.a_empty_rate)
+            if self.a_inconsistent_item:
+                print('费用项不一致：%s' % self.a_inconsistent_item)
 
 
 class Builder(object):
@@ -541,11 +606,11 @@ class Main(object):
         for item in self.cfg.items('table_sql'):
             self.d_table_sql[item[0]] = item[1]
         for item in self.cfg.items('table_rate'):
-            self.d_table_rate[item[0]] = item[1]
+            self.d_table_rate[item[0]] = map(int, item[1].split(','))
         for item in self.cfg.items('table_rate_convert'):
             self.d_table_rate_convert[item[0]] = item[1]
         for item in self.cfg.items('rate_feeid_map'):
-            self.d_rate_feeid_map[item[0]] = item[1]
+            self.d_rate_feeid_map[int(item[0])] = int(item[1])
 
     def usage(self):
         print("Usage: %s" % self.appName)
@@ -630,8 +695,9 @@ class Main(object):
         print('logfile: %s' % self.logFile)
 
         self.connectServer()
-        builder = self.makeBuilder()
-        builder.start()
+        with self.dDbcn['db_main']:
+            builder = self.makeBuilder()
+            builder.start()
 
 
 def createInstance(module_name, class_name, *args, **kwargs):
