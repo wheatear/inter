@@ -231,7 +231,7 @@ class _CursorCtx(object):
         with connection():
             pass
     '''
-    def __init__(self, sql, persistent=False, db_ctx=None):
+    def __init__(self, sql, db_ctx=None, persistent=False):
         global _db_ctx
         self.sql = sql
         self.sql_name = get_sql_key(sql)
@@ -837,6 +837,7 @@ class Db(object):
         elif service_name:
             dsn = orcl.makedsn(host, port, service_name=service_name)
         dbconf['dsn'] = dsn
+
         eng = _Engine(lambda: orcl.connect(**dbconf))
         logging.info('Init oracle engine <%s> ok.' % hex(id(eng)))
         self.db_ctx = _DbCtx(eng)

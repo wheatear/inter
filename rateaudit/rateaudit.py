@@ -329,18 +329,21 @@ class RateAudit(object):
             sql = main.d_table_sql[tab]
             with db:
                 d_rates = db.select(sql)
+                logging.info('get %d rate from %s', len(d_rates), tab)
                 self.make_rate_set(tab,d_rates)
 
     def make_rate_set(self, tab, d_rates):
-        a_rate_key = main.d_table_rate[tab]
+        a_rate_key = list(main.d_table_rate[tab])
+        logging.debug('rate key: %s', a_rate_key)
         d_itemrate = self.dRate[tab]
         d_rate_map = None
         if tab in main.d_table_rate_convert:
             d_rate_map = main.d_rate_feeid_map
         for ra in d_rates:
-            item = ra['item']
-            rate = d_rate_map[ra['rate']] if d_rate_map else ra['rate']
-            if rate not in d_itemrate:
+            # logging.debug('row:%s', ra)
+            item = ra['ITEM']
+            rate = d_rate_map[ra['RATE']] if d_rate_map else ra['RATE']
+            if rate not in a_rate_key:
                 self.consistent = False
                 self.a_error_rate.append(rate)
                 continue
@@ -349,12 +352,15 @@ class RateAudit(object):
                 self.a_duplicate_item.append(item)
                 continue
             d_itemrate[rate].add(item)
+        logging.info('error rate: %s', self.a_error_rate)
+        logging.info('duplicate_item: %s', self.a_duplicate_item)
 
         # check empty rate
         for rk in a_rate_key:
             if len(d_itemrate[rk]) == 0:
                 self.consistent = False
-                self.a_empty_rate.append(rate)
+                self.a_empty_rate.append(rk)
+        logging.info('empty_rate: %s', self.a_empty_rate)
 
     def audit(self):
         a_rates = set()
@@ -374,8 +380,6 @@ class RateAudit(object):
                 self.consistent = False
                 self.a_inconsistent_item.extend(exclusive)
 
-
-
     def start(self):
         self.get_rate()
         self.audit()
@@ -383,13 +387,17 @@ class RateAudit(object):
             print('All rate is consistent in 3 tables.')
         else:
             if self.a_duplicate_item:
-                print('费用项重复：%s' % self.a_duplicate_item)
+                print('duplicat %d' % len(self.a_duplicate_item))
+                # print('费用项重复：%s' % self.a_duplicate_item)
             if self.a_error_rate:
-                print('错误的税率：%s' % self.a_error_rate)
+                print('a_error_rate %d' % len(self.a_error_rate))
+                # print('错误的税率：%s' % self.a_error_rate)
             if self.a_empty_rate:
-                print('税率没有费用项：%s' % self.a_empty_rate)
+                print('a_empty_rate %d' % len(self.a_empty_rate))
+                # print('税率没有费用项：%s' % self.a_empty_rate)
             if self.a_inconsistent_item:
-                print('费用项不一致：%s' % self.a_inconsistent_item)
+                print('a_inconsistent_item %d' % len(self.a_inconsistent_item))
+                # print('费用项不一致：%s' % self.a_inconsistent_item)
 
 
 class Builder(object):
@@ -538,8 +546,11 @@ class Main(object):
         self.dDbcn = {}
         self.conn = None
         # self.psId = None
-        self.inFileName = None
-        self.dsIn = None
+        self.d_table = {}
+        self.d_table_sql = {}
+        self.d_table_rate = {}
+        self.d_table_rate_convert = {}
+        self.d_rate_feeid_map = {}
 
     def checkArgv(self):
         self.dirBin = os.path.dirname(os.path.abspath(__file__))
@@ -555,6 +566,7 @@ class Main(object):
         # self.dirLog = os.path.join(self.dirBase, 'log')
         # self.dirCfg = os.path.join(self.dirBase, 'bin')
         self.dirCfg = self.dirBin
+        self.dirLog = self.dirBin
         # self.dirTpl = os.path.join(self.dirBase, 'template')
         # self.dirLib = os.path.join(self.dirBase, 'lib')
         # self.dirInput = os.path.join(self.dirBase, 'input')
@@ -576,7 +588,7 @@ class Main(object):
         logNamePre = '%s_%s' % (self.appNameBody, self.today)
         # outFileName = '%s_%s' % (os.path.basename(self.inFileName), self.today)
         self.cfgFile = os.path.join(self.dirCfg, cfgName)
-        # self.logFile = os.path.join(self.dirLog, logName)
+        self.logFile = os.path.join(self.dirLog, logName)
         # self.logPre = os.path.join(self.dirLog, logNamePre)
         # self.outFile = os.path.join(self.dirOutput, outFileName)
         # self.cmdFile = os.path.join(self.dirTpl, self.cmdFileName)
@@ -596,17 +608,19 @@ class Main(object):
             exit(-1)
         for db in db_sections:
             d_dbinfo = {}
-            for inf in self.cfg.items(db):
-                d_dbinfo[inf[0]] = inf[1]
+            for item in self.cfg.items(db):
+                d_dbinfo[item[0]] = item[1]
             self.dDbInfo[db] = d_dbinfo
 
         # read rate audit conf
-        for item in self.cfg.items('db_table_map'):
+        for item in self.cfg.items('table_map'):
             self.d_table[item[0]] = item[1]
         for item in self.cfg.items('table_sql'):
             self.d_table_sql[item[0]] = item[1]
         for item in self.cfg.items('table_rate'):
-            self.d_table_rate[item[0]] = map(int, item[1].split(','))
+            # self.d_table_rate[item[0]] = map(int, item[1].split(','))
+            self.d_table_rate[item[0]] = [int(x) for x in item[1].split(',')]
+            # print('table rate: %s : %s' % (item[0], self.d_table_rate[item[0]]))
         for item in self.cfg.items('table_rate_convert'):
             self.d_table_rate_convert[item[0]] = item[1]
         for item in self.cfg.items('rate_feeid_map'):
@@ -630,31 +644,12 @@ class Main(object):
         for db,info in self.dDbInfo.items():
             if db in self.dDbcn:
                 continue
+            logging.debug(info)
             self.dDbcn[db] = lib.oradb.Db(info)
         return self.dDbcn
-        if self.conn is not None: return self.conn
-        # self.dbinfo['connstr'] = '%s/%s@%s/%s' % (
-        # self.dbinfo['dbusr'], self.dbinfo['dbpwd'], self.dbinfo['dbhost'], self.dbinfo['dbsid'])
-        # if "db" not in self.cfg.sections():
-        #     logging.error("no db configer")
-        #     exit(-1)
-        # self.conn = DbConn(self.dDbInfo)
-        # self.conn.connectServer()
-        self.conn = lib.oradb.Db(self.dDbInfo['db_main'])
-        return self.conn
-
-    # def connDb(self):
-    #     if self.conn: return self.conn
-    #     try:
-    #         connstr = self.cfg.dbinfo['connstr']
-    #         self.conn = orcl.Connection(connstr)
-    #         # dsn = orcl.makedsn(self.dbHost, self.dbPort, self.dbSid)
-    #         # dsn = dsn.replace('SID=', 'SERVICE_NAME=')
-    #         # self.conn = orcl.connect(self.dbUser, self.dbPwd, dsn)
-    #     except Exception, e:
-    #         logging.fatal('could not connect to oracle(%s:%s/%s), %s', self.cfg.dbinfo['dbhost'], self.cfg.dbinfo['dbusr'], self.cfg.dbinfo['dbsid'], e)
-    #         exit()
-    #     return self.conn
+        # if self.conn is not None: return self.conn
+        # self.conn = lib.oradb.Db(self.dDbInfo['db_main'])
+        # return self.conn
 
     def prepareSql(self, sql):
         logging.info('prepare sql: %s', sql)
@@ -667,7 +662,7 @@ class Main(object):
         return cur
 
     def makeBuilder(self):
-        builder = Builder(self)
+        builder = RateAudit()
         return builder
 
         # if self.facType == 't':
