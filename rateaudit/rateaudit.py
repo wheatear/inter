@@ -308,14 +308,24 @@ class GetRate(object):
 
 
 class RateAudit(object):
-    '''audit rate from 3 tables'''
+    '''audit rate from 3 tables
+    audit_code:
+        error_rate          税率错误
+        duplicate_item      科目重复
+        empty_rate          空税率
+        conflict_item       科目冲突
+        consistent          稽核一致
+
+    '''
+    SAVE_SQL = 'insert into zg.rate_audit(audit_code ,item_code ,audit_date ) values(:audit_code ,:item_code ,sysdate)'
+
     def __init__(self):
         self.dRate = {}
         self.consistent = True
-        self.a_duplicate_item = []
-        self.a_error_rate = []
-        self.a_empty_rate = []
-        self.a_inconsistent_item = []
+        self.a_duplicate_item = set()
+        self.a_error_rate = set()
+        self.a_empty_rate = set()
+        self.a_inconsistent_item = set()
 
     def get_rate(self):
         for tab,db_name in main.d_table.items():
@@ -345,12 +355,13 @@ class RateAudit(object):
             rate = d_rate_map[ra['RATE']] if d_rate_map else ra['RATE']
             if rate not in a_rate_key:
                 self.consistent = False
-                self.a_error_rate.append(rate)
+                self.a_error_rate.add(rate)
                 continue
-            if item in d_itemrate[rate]:
-                self.consistent = False
-                self.a_duplicate_item.append(item)
-                continue
+            for r,ir in d_itemrate.items():
+                if item in ir:
+                    self.consistent = False
+                    self.a_duplicate_item.add(item)
+                    continue
             d_itemrate[rate].add(item)
         logging.info('error rate: %s', self.a_error_rate)
         logging.info('duplicate_item: %s', self.a_duplicate_item)
@@ -359,15 +370,16 @@ class RateAudit(object):
         for rk in a_rate_key:
             if len(d_itemrate[rk]) == 0:
                 self.consistent = False
-                self.a_empty_rate.append(rk)
+                self.a_empty_rate.add(rk)
         logging.info('empty_rate: %s', self.a_empty_rate)
 
     def audit(self):
         a_rates = set()
         for tab,rates in main.d_table_rate.items():
             a_rates.update(rates)
-        a_check = []
+
         for r in a_rates:
+            a_check = []
             for tab,rates in main.d_table_rate.items():
                 if r in rates:
                     a_check.append(self.dRate[tab][r])
@@ -378,26 +390,48 @@ class RateAudit(object):
                     continue
                 exclusive = base_item ^ a_check[i]
                 self.consistent = False
-                self.a_inconsistent_item.extend(exclusive)
+                self.a_inconsistent_item.update(exclusive)
+
+    def save_set(self, code, data_set):
+        logging.info('save %s data set', code)
+        db = main.dDbcn['db_main']
+        with db.cursor(RateAudit.SAVE_SQL) as cur:
+            for a in data_set:
+                d_result = {'audit_code':code, 'item_code':a}
+                cur._update(d_result)
+
+    def save_result(self):
+        '''
+        error_rate          税率错误
+        duplicate_item      科目重复
+        empty_rate          空税率
+        conflict_item       科目冲突
+        consistent          稽核一致'''
+        if self.consistent:
+            logging.info('All rate is consistent in 3 tables.')
+            self.save_set('consistent', {0})
+        else:
+            if self.a_duplicate_item:
+                logging.info('duplicate_item count %d', len(self.a_duplicate_item))
+                logging.info('duplicate_item：%s', self.a_duplicate_item)
+                self.save_set('duplicate_item', self.a_duplicate_item)
+            if self.a_error_rate:
+                logging.info('error_rate count %d', len(self.a_error_rate))
+                logging.info('error_rate：%s', self.a_error_rate)
+                self.save_set('error_rate', self.a_error_rate)
+            if self.a_empty_rate:
+                logging.info('empty_rate count %d', len(self.a_empty_rate))
+                logging.info('empty_rate：%s', self.a_empty_rate)
+                self.save_set('empty_rate', self.a_empty_rate)
+            if self.a_inconsistent_item:
+                logging.info('conflict_item count %d', len(self.a_inconsistent_item))
+                logging.info('conflict_item：%s', self.a_inconsistent_item)
+                self.save_set('conflict_item', self.a_inconsistent_item)
 
     def start(self):
         self.get_rate()
         self.audit()
-        if self.consistent:
-            print('All rate is consistent in 3 tables.')
-        else:
-            if self.a_duplicate_item:
-                print('duplicat %d' % len(self.a_duplicate_item))
-                # print('费用项重复：%s' % self.a_duplicate_item)
-            if self.a_error_rate:
-                print('a_error_rate %d' % len(self.a_error_rate))
-                # print('错误的税率：%s' % self.a_error_rate)
-            if self.a_empty_rate:
-                print('a_empty_rate %d' % len(self.a_empty_rate))
-                # print('税率没有费用项：%s' % self.a_empty_rate)
-            if self.a_inconsistent_item:
-                print('a_inconsistent_item %d' % len(self.a_inconsistent_item))
-                # print('费用项不一致：%s' % self.a_inconsistent_item)
+        self.save_result()
 
 
 class Builder(object):
@@ -545,7 +579,6 @@ class Main(object):
         self.argc = len(sys.argv)
         self.dDbcn = {}
         self.conn = None
-        # self.psId = None
         self.d_table = {}
         self.d_table_sql = {}
         self.d_table_rate = {}
@@ -558,8 +591,8 @@ class Main(object):
         self.appName = os.path.basename(self.Name)
         self.appNameBody, self.appNameExt = os.path.splitext(self.appName)
 
-        if self.argc > 1:
-            self.inFileName = sys.argv[1]
+        # if self.argc > 1:
+        #     self.inFileName = sys.argv[1]
 
     def parseWorkEnv(self):
         # self.dirBin = os.path.join(self.dirBase, 'bin')
@@ -599,7 +632,6 @@ class Main(object):
         self.cfg = configparser.ConfigParser()
         self.cfg.read(self.cfgFile)
         self.dDbInfo = {}
-        # self.dNetTypes = {}
 
         # read db info
         db_sections = [x for x in self.cfg.sections() if x[:3] == 'db_']
@@ -620,7 +652,6 @@ class Main(object):
         for item in self.cfg.items('table_rate'):
             # self.d_table_rate[item[0]] = map(int, item[1].split(','))
             self.d_table_rate[item[0]] = [int(x) for x in item[1].split(',')]
-            # print('table rate: %s : %s' % (item[0], self.d_table_rate[item[0]]))
         for item in self.cfg.items('table_rate_convert'):
             self.d_table_rate_convert[item[0]] = item[1]
         for item in self.cfg.items('rate_feeid_map'):
@@ -647,9 +678,6 @@ class Main(object):
             logging.debug(info)
             self.dDbcn[db] = lib.oradb.Db(info)
         return self.dDbcn
-        # if self.conn is not None: return self.conn
-        # self.conn = lib.oradb.Db(self.dDbInfo['db_main'])
-        # return self.conn
 
     def prepareSql(self, sql):
         logging.info('prepare sql: %s', sql)

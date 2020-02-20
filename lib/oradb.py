@@ -858,6 +858,7 @@ class Db(object):
 
     def __exit__(self, exctype, excvalue, traceback):
         # global _db_ctx
+        logging.info('exit Db <%s>.', hex(id(self)))
         if self.should_cleanup:
             self.db_ctx.cleanup()
         if self.cur_cleanup:
@@ -902,8 +903,8 @@ class Db(object):
         '''
         return _TransactionCtx(self.db_ctx)
 
-    def cursor(self, sql):
-        return _CursorCtx(sql, self.db_ctx)
+    def cursor(self, sql, persistent=False):
+        return _CursorCtx(sql, self.db_ctx, persistent)
 
     def close_cursor(self, sql):
         sql_name = get_sql_key(sql)
@@ -1016,8 +1017,8 @@ class Db(object):
         # with _ConnectionCtx(self.db_ctx):
         return self._select(sql, False, d_arg)
 
-    def _update(self, sql, d_arg):
-        cursor = self.cursor(sql)
+    def _update(self, sql, d_arg, persistent=False):
+        cursor = self.cursor(sql, persistent)
         return cursor._update(d_arg)
         # sql = sql.replace('?', '%s')
         logging.info('SQL: %s, ARGS: %s' % (sql, d_arg))
@@ -1037,6 +1038,10 @@ class Db(object):
         #     finally:
         #         if cursor:
         #             cursor.close()
+
+    # def _update_set(self, sql, set):
+    #     cursor = self.cursor(sql)
+    #     return cursor._update(d_arg)
 
     def insert(self, table, d_arg=None):
         '''
