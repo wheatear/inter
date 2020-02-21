@@ -913,12 +913,12 @@ class Db(object):
             self.db_ctx.dSql.pop(sql_name)
             cur.close()
 
-    def _select(self, sql, first, d_arg):
+    def _select(self, sql, first, d_arg, persistent=False):
         ' execute select SQL and return unique result or list results.'
         # cursor = self.cursor(sql)
         # with cursor:
         logging.info('SQL: %s, ARGS: %s', sql, d_arg)
-        with self.cursor(sql) as cursor:
+        with self.cursor(sql, persistent) as cursor:
             return cursor._select(first, d_arg)
 
         # try:
@@ -939,7 +939,7 @@ class Db(object):
         #     if cursor:
         #         cursor.close()
 
-    def select_one(self, sql, d_arg=None):
+    def select_one(self, sql, d_arg=None, persistent=False):
         '''
         Execute select SQL and expected one result.
         If no result found, return None.
@@ -960,9 +960,9 @@ class Db(object):
         u'Alice'
         '''
         # with _ConnectionCtx(self.db_ctx):
-        return self._select(sql, True, d_arg)
+        return self._select(sql, True, d_arg, persistent)
 
-    def select_int(self, sql, d_arg=None):
+    def select_int(self, sql, d_arg=None, persistent=False):
         '''
         Execute select SQL and expected one int and only one int result.
 
@@ -987,12 +987,12 @@ class Db(object):
         MultiColumnsError: Expect only one column.
         '''
         # with _ConnectionCtx(self.db_ctx):
-        d = self._select(sql, True, d_arg)
+        d = self._select(sql, True, d_arg, persistent)
         if len(d) != 1:
             raise MultiColumnsError('Expect only one column.')
         return d.values()[0]
 
-    def select(self, sql, d_arg=None):
+    def select(self, sql, d_arg=None, persistent=False):
         '''
         Execute select SQL and return list or empty list if no result.
 
@@ -1015,7 +1015,7 @@ class Db(object):
         u'Wall.E'
         '''
         # with _ConnectionCtx(self.db_ctx):
-        return self._select(sql, False, d_arg)
+        return self._select(sql, False, d_arg, persistent)
 
     def _update(self, sql, d_arg, persistent=False):
         cursor = self.cursor(sql, persistent)
@@ -1043,7 +1043,7 @@ class Db(object):
     #     cursor = self.cursor(sql)
     #     return cursor._update(d_arg)
 
-    def insert(self, table, d_arg=None):
+    def insert(self, table, d_arg=None, persistent=False):
         '''
         Execute insert SQL.
 
@@ -1060,9 +1060,9 @@ class Db(object):
         '''
         cols = d_arg.keys()
         sql = 'insert into %s(%s) values(%s)' % (table, ','.join(cols), ','.join([':%s' % col for col in cols]))
-        return self._update(sql, d_arg)
+        return self._update(sql, d_arg, persistent)
 
-    def update(self, sql, d_arg=None):
+    def update(self, sql, d_arg=None, persistent=False):
         r'''
         Execute update SQL.
 
@@ -1084,10 +1084,7 @@ class Db(object):
         >>> update('update user set passwd=? where id=?', '***', '123\' or id=\'456')
         0
         '''
-        return self._update(sql, d_arg)
-
-    def open_cursor(self, sql):
-        return _CursorCtx(sql, self.db_ctx)
+        return self._update(sql, d_arg, persistent)
 
 
 if __name__=='__main__':

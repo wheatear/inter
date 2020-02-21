@@ -317,7 +317,8 @@ class RateAudit(object):
         consistent          稽核一致
 
     '''
-    SAVE_SQL = 'insert into zg.rate_audit(audit_code ,item_code ,audit_date ) values(:audit_code ,:item_code ,sysdate)'
+    SAVE_SQL = 'insert into zg.rate_audit(audit_code ,item_code , item_name, audit_date ) values(:audit_code ,:item_code , :ITEM_NAME, sysdate)'
+    ITEMNAME_SQL ='select acct_item_type_name as item_name from base. bs_acct_item_type where acct_item_type_id=:item_code'
 
     def __init__(self):
         self.dRate = {}
@@ -397,8 +398,18 @@ class RateAudit(object):
         db = main.dDbcn['db_main']
         with db.cursor(RateAudit.SAVE_SQL) as cur:
             for a in data_set:
-                d_result = {'audit_code':code, 'item_code':a}
+                d_result = {'audit_code':code, 'item_code':a, 'ITEM_NAME':''}
+                if code in ['duplicate_item','conflict_item']:
+                    d_result.update(self.get_item_name(a))
                 cur._update(d_result)
+
+    def get_item_name(self, item_code):
+        logging.debug('query item name for %s', item_code)
+        db = main.dDbcn['db_main']
+        d_itemcode = {'item_code':item_code}
+        item_name = ''
+        item_name = db.select_one(RateAudit.ITEMNAME_SQL, d_itemcode, True)
+        return item_name
 
     def save_result(self):
         '''

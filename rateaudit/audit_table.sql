@@ -3,6 +3,7 @@ create table ZG.rate_audit
 (
   audit_code VARCHAR2(32),
   item_code NUMBER(8),
+  item_name  VARCHAR2(100),
 audit_date date
 );
 -- Add comments to the columns
@@ -12,4 +13,5 @@ empty_rate          空税率
 conflict_item       科目冲突
 consistent          稽核一致';
 comment on column ZG.rate_audit.item_code    is '项目代码，包括科目或税率代码';
+comment on column RATE_AUDIT.item_name       is '科目名称';
 comment on column ZG.rate_audit.audit_date    is '稽核时间';
