@@ -400,7 +400,10 @@ class RateAudit(object):
             for a in data_set:
                 d_result = {'audit_code':code, 'item_code':a, 'ITEM_NAME':''}
                 if code in ['duplicate_item','conflict_item']:
-                    d_result.update(self.get_item_name(a))
+                    item_name = self.get_item_name(a)
+                    if item_name:
+                        d_result.update(item_name)
+                    # d_result['ITEM_NAME'] = self.get_item_name(a)
                 cur._update(d_result)
 
     def get_item_name(self, item_code):
