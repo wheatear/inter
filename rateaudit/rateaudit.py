@@ -28,7 +28,7 @@ import cx_Oracle as orcl
 import configparser
 import shutil
 
-import lib.oradb
+import oradb
 
 
 
@@ -690,7 +690,7 @@ class Main(object):
             if db in self.dDbcn:
                 continue
             logging.debug(info)
-            self.dDbcn[db] = lib.oradb.Db(info)
+            self.dDbcn[db] = oradb.Db(info)
         return self.dDbcn
 
     def prepareSql(self, sql):
