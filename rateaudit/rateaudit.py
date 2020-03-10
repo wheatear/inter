@@ -318,7 +318,7 @@ class RateAudit(object):
 
     '''
     SAVE_SQL = 'insert into zg.rate_audit(audit_code ,item_code , item_name, audit_date ) values(:audit_code ,:item_code , :ITEM_NAME, sysdate)'
-    ITEMNAME_SQL ='select acct_item_type_name as item_name from base. bs_acct_item_type where acct_item_type_id=:item_code'
+    ITEMNAME_SQL ='select acct_item_type_name as item_name from base.bs_acct_item_type where acct_item_type_id=:item_code'
 
     def __init__(self):
         self.dRate = {}
@@ -381,17 +381,22 @@ class RateAudit(object):
 
         for r in a_rates:
             a_check = []
-            for tab,rates in main.d_table_rate.items():
-                if r in rates:
+            # for tab,rates in main.d_table_rate.items():
+            #     if r in rates:
+            #         a_check.append(self.dRate[tab][r])
+            for tab,rate_sets in self.dRate:
+                if r in rate_sets:
                     a_check.append(self.dRate[tab][r])
 
-            base_item = a_check[0]
-            for i in range(1,len(a_check)):
-                if a_check[i] == base_item:
-                    continue
-                exclusive = base_item ^ a_check[i]
-                self.consistent = False
-                self.a_inconsistent_item.update(exclusive)
+            # base_item = a_check[0]
+            for i in range(0,len(a_check)):
+                base_item = a_check[i]
+                for j in range(i+1, len(a_check)):
+                    if a_check[j] == base_item:
+                        continue
+                    exclusive = base_item ^ a_check[j]
+                    self.consistent = False
+                    self.a_inconsistent_item.update(exclusive)
 
     def save_set(self, code, data_set):
         logging.info('save %s data set', code)
