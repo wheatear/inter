@@ -384,7 +384,7 @@ class RateAudit(object):
             # for tab,rates in main.d_table_rate.items():
             #     if r in rates:
             #         a_check.append(self.dRate[tab][r])
-            for tab,rate_sets in self.dRate:
+            for tab,rate_sets in self.dRate.items():
                 if r in rate_sets:
                     a_check.append(self.dRate[tab][r])
 
