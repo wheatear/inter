@@ -303,6 +303,23 @@ class _CursorCtx(object):
             #     self.cur.close()
             logging.debug('select ok.')
 
+    def _select_many(self, d_arg, rows_no=100):
+        logging.info('SQL: %s, ARGS: %s' % (self.sql, d_arg))
+        if not self.cur:
+            self.__enter__()
+        try:
+            if d_arg:
+                self.cur.execute(None, d_arg)
+            else:
+                self.cur.execute(None)
+            if self.cur.description:
+                names = [x[0] for x in self.cur.description]
+            return [Dict(names, x) for x in self.cur.fetchmany(rows_no)]
+        finally:
+            # if self.cur:
+            #     self.cur.close()
+            logging.debug('select many ok.')
+
     def select_one(self, d_arg=None):
         '''
         Execute select SQL and expected one result.
@@ -344,6 +361,25 @@ class _CursorCtx(object):
             return r
         finally:
             logging.debug('execute sql ok.')
+
+    def _update_many(self, a_arg):
+        # sql = sql.replace('?', '%s')
+        logging.info('SQL: %s, ARGS: %s' % (self.sql, a_arg))
+        if not self.cur:
+            self.__enter__()
+        try:
+            if a_arg:
+                self.cur.executemany(None, a_arg)
+            else:
+                self.cur.execute(None)
+            r = self.cur.rowcount
+            if self.db_ctx.transactions == 0:
+                # no transaction enviroment:
+                logging.info('auto commit')
+                self.db_ctx.connection.commit()
+            return r
+        finally:
+            logging.debug('execute sql many ok.')
 
     def insert(self, d_arg=None):
         '''
@@ -939,6 +975,14 @@ class Db(object):
         #     if cursor:
         #         cursor.close()
 
+    def _select_many(self, sql, d_arg, persistent=False, rows_no=100):
+        ' execute select SQL and return unique result or list results.'
+        # cursor = self.cursor(sql)
+        # with cursor:
+        logging.info('SQL: %s, ARGS: %s', sql, d_arg)
+        with self.cursor(sql, persistent) as cursor:
+            return cursor._select_many(d_arg, rows_no)
+
     def select_one(self, sql, d_arg=None, persistent=False):
         '''
         Execute select SQL and expected one result.
@@ -1039,6 +1083,12 @@ class Db(object):
         #         if cursor:
         #             cursor.close()
 
+    def _update_many(self, sql, a_arg, persistent=False):
+        cursor = self.cursor(sql, persistent)
+        return cursor._update_many(a_arg)
+        # sql = sql.replace('?', '%s')
+        logging.info('SQL: %s, ARGS: %s' % (sql, a_arg))
+
     # def _update_set(self, sql, set):
     #     cursor = self.cursor(sql)
     #     return cursor._update(d_arg)
@@ -1063,6 +1113,30 @@ class Db(object):
         return self._update(sql, d_arg, persistent)
 
     def update(self, sql, d_arg=None, persistent=False):
+        r'''
+        Execute update SQL.
+
+        >>> u1 = dict(id=1000, name='Michael', email='michael@test.org', passwd='123456', last_modified=time.time())
+        >>> insert('user', **u1)
+        1
+        >>> u2 = select_one('select * from user where id=?', 1000)
+        >>> u2.email
+        u'michael@test.org'
+        >>> u2.passwd
+        u'123456'
+        >>> update('update user set email=?, passwd=? where id=?', 'michael@example.org', '654321', 1000)
+        1
+        >>> u3 = select_one('select * from user where id=?', 1000)
+        >>> u3.email
+        u'michael@example.org'
+        >>> u3.passwd
+        u'654321'
+        >>> update('update user set passwd=? where id=?', '***', '123\' or id=\'456')
+        0
+        '''
+        return self._update(sql, d_arg, persistent)
+
+    def update_many(self, sql, d_arg=None, persistent=False):
         r'''
         Execute update SQL.
 
